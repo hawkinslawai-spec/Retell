@@ -1,4 +1,4 @@
-# Hawkings Law — AI phone agent console
+# Hawkins Law — AI phone agent console
 
 A Next.js app that gives a Retell AI voice agent the ability to answer the
 firm's phone, book appointments, take down enquiries, put callers through to a

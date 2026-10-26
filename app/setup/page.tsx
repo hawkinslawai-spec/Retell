@@ -79,8 +79,8 @@ function Section({
 export default function SetupPage() {
   // Nothing here is persisted. It builds the env block for Vercel and nothing
   // more — no secret typed on this page is ever sent to the server.
-  const [brand, setBrand] = useState("Hawkings Law");
-  const [bizName, setBizName] = useState("Hawkings Law");
+  const [brand, setBrand] = useState("Hawkins Law");
+  const [bizName, setBizName] = useState("Hawkins Law");
   const [tz, setTz] = useState("Europe/London");
   const [openHour, setOpenHour] = useState("9");
   const [closeHour, setCloseHour] = useState("17");
@@ -114,8 +114,8 @@ export default function SetupPage() {
       "",
       "# ---------- This deployment ----------",
       "APP_BASE_URL=https://your-project.vercel.app",
-      `BRAND_NAME=${brand || "Hawkings Law"}`,
-      `BUSINESS_NAME=${bizName || brand || "Hawkings Law"}`,
+      `BRAND_NAME=${brand || "Hawkins Law"}`,
+      `BUSINESS_NAME=${bizName || brand || "Hawkins Law"}`,
       "",
       "# ---------- Database ----------",
       "# Supabase -> Project Settings -> Data API, and API Keys.",
@@ -427,7 +427,7 @@ export default function SetupPage() {
               style={fld}
               value={smtpUser}
               onChange={(e) => setSmtpUser(e.target.value)}
-              placeholder="reception@hawkingslaw.com"
+              placeholder="reception@hawkinslaw.com"
             />
           </div>
           <div>
@@ -436,7 +436,7 @@ export default function SetupPage() {
               style={fld}
               value={summaryEmail}
               onChange={(e) => setSummaryEmail(e.target.value)}
-              placeholder="partner@hawkingslaw.com"
+              placeholder="partner@hawkinslaw.com"
             />
           </div>
         </div>

@@ -35,10 +35,10 @@ export const MAX_DAYS_AHEAD = num(process.env.MAX_DAYS_AHEAD, 60);
 export const MAX_SLOTS_RETURNED = num(process.env.MAX_SLOTS_RETURNED, 3);
 
 /** Business name used in appointment records and agent prompts. */
-export const BUSINESS_NAME = process.env.BUSINESS_NAME || "Hawkings Law";
+export const BUSINESS_NAME = process.env.BUSINESS_NAME || "Hawkins Law";
 
 /** Shown in the sidebar and page titles. */
-export const BRAND_NAME = process.env.BRAND_NAME || "Hawkings Law";
+export const BRAND_NAME = process.env.BRAND_NAME || "Hawkins Law";
 
 /** Set to "false" ONLY while testing with curl. Never in production. */
 export const VERIFY_SIGNATURE = process.env.RETELL_VERIFY_SIGNATURE !== "false";
