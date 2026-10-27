@@ -104,7 +104,7 @@ function screenTools() {
 }
 
 /**
- * Create or update the one screening agent shared by all six transfer tools.
+ * Create or update the one screening agent shared by every transfer tool.
  *
  * Shared rather than one per person because the whisper's variable part —
  * who is calling and about what — travels on the call's dynamic variables,

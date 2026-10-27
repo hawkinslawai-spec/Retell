@@ -205,7 +205,7 @@ export async function GET(req: NextRequest) {
 
   // --------------------------------------------------------- screened transfer
   if (isAmy) {
-    // Amy's six transfer tools and her screening agent are what matter, not
+    // Amy's transfer tools and her screening agent are what matter, not
     // a transfer_number column she never reads.
     try {
       const agent = (await getRetell().agent.retrieve(agentId)) as unknown as Record<string, unknown>;

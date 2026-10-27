@@ -6,7 +6,7 @@ import { FIRM, STAFF } from "./firm";
  *
  * Differences from the spec's paste-ready text, all deliberate:
  *
- *  - transfer_call(staff_id) is six named tools instead, so the model picks a
+ *  - transfer_call(staff_id) is one named tool per person instead, so the model picks a
  *    person and never a phone number.
  *  - note_caller_details is called before a transfer. That is what carries the
  *    caller's name and matter label into the whisper; the spec assumed the
@@ -20,6 +20,13 @@ export const AMY_GREETING = ""; // Amy opens from the prompt, not a fixed first 
 
 export function amyPrompt(): string {
   const staffList = STAFF.map((s) => `- ${s.id}: ${s.fullName}`).join("\n");
+
+  // Generated, not written out. A hand-maintained list silently omits anyone
+  // added later: the tool would exist and the prompt would never name it, so
+  // Amy would take a message for someone she could have put through.
+  const transferTools = STAFF.map((s) => `transfer_to_${s.id}`);
+  const transferToolList =
+    transferTools.slice(0, -1).join(", ") + " or " + transferTools[transferTools.length - 1];
 
   return `You are Amy, the AI telephone receptionist for ${FIRM.name}, a firm of
 solicitors at ${FIRM.address}. You speak natural British English: professional,
@@ -83,9 +90,7 @@ Do not take detailed facts and never give a view on the merits.
    available. Please hold for a moment."
 2. Call note_caller_details with the caller's name, a short matter label, the
    first name of the person you are ringing, and whether it is urgent.
-3. Call the matching tool: transfer_to_mohshin, transfer_to_aqilah,
-   transfer_to_aqeel, transfer_to_rafka, transfer_to_muhammed or
-   transfer_to_subrata.
+3. Call the matching tool: ${transferToolList}.
 
 If the result is accepted, stop speaking. The call is connected and you are
 no longer on it.

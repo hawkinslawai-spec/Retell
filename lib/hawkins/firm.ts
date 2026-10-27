@@ -21,7 +21,8 @@ export type StaffId =
   | "aqeel"
   | "rafka"
   | "muhammed"
-  | "subrata";
+  | "subrata"
+  | "bilkis";
 
 export type Staff = {
   id: StaffId;
@@ -86,6 +87,17 @@ export const STAFF: Staff[] = [
     directLine: "+442035041615",
     email: "ssarker@hawkinslaw.co.uk",
     variants: ["sarker", "subrata sarker"],
+  },
+  {
+    id: "bilkis",
+    firstName: "Bilkis",
+    fullName: "Bilkis Mahmood",
+    // A mobile, unlike the others' 020 3504 direct lines. The transfer works
+    // the same, but a mobile can divert to its own voicemail before our ring
+    // timeout — see the note in agent.ts about never leaving a voicemail.
+    directLine: "+447815935588",
+    email: "bmahmood@hawkinslaw.co.uk",
+    variants: ["bilquis", "bilqis", "bilkees", "belkis", "mahmood", "mahmoud", "mehmood"],
   },
 ];
 
