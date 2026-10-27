@@ -64,6 +64,9 @@ type TwilioNumber = {
   trunk_sid: string | null;
   voice_url?: string | null;
   friendly_name?: string;
+  status?: string;
+  date_created?: string;
+  capabilities?: { voice?: boolean; sms?: boolean; mms?: boolean };
 };
 
 type Trunk = { sid: string; friendly_name: string; domain_name: string };
@@ -249,6 +252,31 @@ export async function diagnose(
       ? undefined
       : "Check the Account SID — a number bought under a subaccount won't show up under the parent, and vice versa.",
   });
+
+  // A number can be bought, attached and perfectly routed and still be unable
+  // to ring, because it was never voice-capable or it's held pending an
+  // address check. Both look identical from the trunk's side: silence.
+  if (number) {
+    const voiceOk = number.capabilities?.voice !== false;
+    const live = !number.status || /in-use|active/i.test(number.status);
+
+    checks.push({
+      id: "number_can_receive",
+      label: "Number can receive calls",
+      status: voiceOk && live ? "pass" : "fail",
+      detail: !voiceOk
+        ? "This number has no voice capability — it can only do SMS"
+        : !live
+        ? `Twilio reports its status as "${number.status}"`
+        : `Voice enabled${number.date_created ? ` · bought ${number.date_created}` : ""}`,
+      fix:
+        voiceOk && live
+          ? undefined
+          : !voiceOk
+          ? "Buy a voice-capable number in Twilio and import that one instead."
+          : "A UK geographic number stays unusable until its address or regulatory bundle is approved. Check Phone Numbers → Regulatory Compliance in Twilio.",
+    });
+  }
 
   const trunks = await listTrunks(creds);
   const { trunk, source } = resolveTrunk(
