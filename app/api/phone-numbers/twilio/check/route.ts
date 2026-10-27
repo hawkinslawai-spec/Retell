@@ -44,25 +44,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const terminationUri = await terminationUriFor(phone);
-    if (!terminationUri) {
-      return NextResponse.json(
-        {
-          message:
-            "Retell has no termination URI for this number, so it isn't on a SIP trunk. Nothing to check — import it through the automatic setup instead.",
-        },
-        { status: 400 }
-      );
-    }
+    // Best-effort. Retell doesn't always surface this, and the diagnosis falls
+    // back to other ways of identifying the trunk rather than giving up.
+    const terminationUri = await terminationUriFor(phone).catch(() => "");
+    const chosenTrunkSid = String(body.trunk_sid ?? "").trim();
 
     const creds = { accountSid, authToken };
 
     if (shouldRepair) {
-      const { steps, diagnosis } = await repair(creds, phone, terminationUri);
+      const { steps, diagnosis } = await repair(creds, phone, terminationUri, chosenTrunkSid);
       return NextResponse.json({ repaired: true, steps, ...diagnosis });
     }
 
-    return NextResponse.json({ repaired: false, ...(await diagnose(creds, phone, terminationUri)) });
+    return NextResponse.json({
+      repaired: false,
+      ...(await diagnose(creds, phone, terminationUri, chosenTrunkSid)),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Check failed";
     // Twilio's own wording for a bad token is "Authenticate", which reads as a

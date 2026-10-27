@@ -38,6 +38,8 @@ export type TrunkCheck = {
   fix?: string;
 };
 
+export type TrunkOption = { sid: string; friendly_name: string; domain_name: string };
+
 export type Diagnosis = {
   account_name: string;
   phone_number: string;
@@ -45,11 +47,15 @@ export type Diagnosis = {
   termination_uri: string;
   trunk_sid: string | null;
   trunk_name: string | null;
+  /** How the trunk was identified — shown so a guess is never mistaken for a fact. */
+  trunk_source: "retell" | "attached" | "only-one" | "chosen" | "none";
   checks: TrunkCheck[];
   /** True when inbound calls will reach Retell. */
   inbound_ready: boolean;
   /** True when there is something this module can fix on its own. */
   repairable: boolean;
+  /** Populated only when the trunk is ambiguous and the operator must pick. */
+  candidate_trunks: TrunkOption[];
 };
 
 type TwilioNumber = {
@@ -103,10 +109,46 @@ async function originationUrls(
   return res.origination_urls || [];
 }
 
+/**
+ * Work out which trunk this number is supposed to be on.
+ *
+ * Retell's termination URI is the authority, because matching on it repairs
+ * the trunk the firm actually configured rather than quietly building a second
+ * one beside it. But Retell doesn't always surface it, so fall back — and say
+ * which route was taken, so a guess is never presented as a fact.
+ */
+function resolveTrunk(
+  trunks: Trunk[],
+  terminationUri: string,
+  numberTrunkSid: string | null,
+  chosenSid: string
+): { trunk: Trunk | null; source: Diagnosis["trunk_source"] } {
+  if (chosenSid) {
+    const picked = trunks.find((t) => t.sid === chosenSid);
+    if (picked) return { trunk: picked, source: "chosen" };
+  }
+
+  const wantedHost = hostOf(terminationUri);
+  if (wantedHost) {
+    const matched = trunks.find((t) => hostOf(t.domain_name) === wantedHost);
+    if (matched) return { trunk: matched, source: "retell" };
+  }
+
+  if (numberTrunkSid) {
+    const attached = trunks.find((t) => t.sid === numberTrunkSid);
+    if (attached) return { trunk: attached, source: "attached" };
+  }
+
+  if (trunks.length === 1) return { trunk: trunks[0], source: "only-one" };
+
+  return { trunk: null, source: "none" };
+}
+
 export async function diagnose(
   creds: TwilioCreds,
   phone: string,
-  terminationUri: string
+  terminationUri: string,
+  chosenTrunkSid = ""
 ): Promise<Diagnosis> {
   const checks: TrunkCheck[] = [];
 
@@ -131,23 +173,36 @@ export async function diagnose(
       : "Check the Account SID — a number bought under a subaccount won't show up under the parent, and vice versa.",
   });
 
-  // Retell's termination URI is the authority on which trunk this number is
-  // meant to use. Matching on it means we repair the trunk the firm actually
-  // configured rather than quietly building a second one beside it.
-  const wantedHost = hostOf(terminationUri);
   const trunks = await listTrunks(creds);
-  const trunk = trunks.find((t) => hostOf(t.domain_name) === wantedHost) ?? null;
+  const { trunk, source } = resolveTrunk(
+    trunks,
+    terminationUri,
+    number?.trunk_sid ?? null,
+    chosenTrunkSid
+  );
+
+  const SOURCE_NOTE: Record<Diagnosis["trunk_source"], string> = {
+    retell: "matched to Retell's termination URI",
+    attached: "the trunk this number is already on",
+    "only-one": "the only trunk in this account",
+    chosen: "chosen by you",
+    none: "",
+  };
 
   checks.push({
     id: "trunk_exists",
-    label: "Trunk Retell points at",
+    label: "SIP trunk",
     status: trunk ? "pass" : "fail",
     detail: trunk
-      ? `${trunk.friendly_name || "(unnamed)"} — ${trunk.domain_name}`
-      : `No trunk in this account has the domain ${wantedHost || "(none set)"}`,
+      ? `${trunk.friendly_name || "(unnamed)"} — ${trunk.domain_name} (${SOURCE_NOTE[source]})`
+      : trunks.length === 0
+      ? "This Twilio account has no SIP trunks"
+      : `Couldn't tell which of the ${trunks.length} trunks this number should use`,
     fix: trunk
       ? undefined
-      : "Retell's termination URI doesn't match any trunk here. Either the number belongs to a different Twilio account, or the trunk was deleted.",
+      : trunks.length === 0
+      ? "Use the automatic setup on this number — it builds the trunk from scratch."
+      : "Pick the trunk below and run the check again.",
   });
 
   let origination: { sid: string; sip_url: string; enabled: boolean }[] = [];
@@ -254,10 +309,18 @@ export async function diagnose(
     termination_uri: terminationUri,
     trunk_sid: trunk?.sid ?? null,
     trunk_name: trunk?.friendly_name ?? null,
+    trunk_source: source,
     checks,
     inbound_ready: inboundReady,
     // We can only fix things once we know which trunk and which number.
     repairable: Boolean(trunk && number) && !inboundReady,
+    candidate_trunks: trunk
+      ? []
+      : trunks.map((t) => ({
+          sid: t.sid,
+          friendly_name: t.friendly_name,
+          domain_name: t.domain_name,
+        })),
   };
 }
 
@@ -268,15 +331,16 @@ export async function diagnose(
 export async function repair(
   creds: TwilioCreds,
   phone: string,
-  terminationUri: string
+  terminationUri: string,
+  chosenTrunkSid = ""
 ): Promise<{ steps: string[]; diagnosis: Diagnosis }> {
   const steps: string[] = [];
 
-  const before = await diagnose(creds, phone, terminationUri);
+  const before = await diagnose(creds, phone, terminationUri, chosenTrunkSid);
 
   if (!before.trunk_sid) {
     throw new Error(
-      `No trunk in this Twilio account matches Retell's termination URI (${terminationUri}). Nothing to repair — re-import the number instead.`
+      "Couldn't tell which SIP trunk this number should use, so there's nothing safe to change. Pick a trunk and run the check again."
     );
   }
 
@@ -330,6 +394,6 @@ export async function repair(
     );
   }
 
-  const after = await diagnose(creds, phone, terminationUri);
+  const after = await diagnose(creds, phone, terminationUri, trunkSid);
   return { steps, diagnosis: after };
 }

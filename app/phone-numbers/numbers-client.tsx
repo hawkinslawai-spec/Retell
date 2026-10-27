@@ -30,6 +30,7 @@ type Diagnosis = {
   checks: TrunkCheck[];
   inbound_ready: boolean;
   repairable: boolean;
+  candidate_trunks: { sid: string; friendly_name: string; domain_name: string }[];
   steps?: string[];
 };
 
@@ -99,6 +100,7 @@ export default function NumbersClient() {
   const [checkBusy, setCheckBusy] = useState(false);
   const [checkErr, setCheckErr] = useState("");
   const [diag, setDiag] = useState<Diagnosis | null>(null);
+  const [trunkPick, setTrunkPick] = useState("");
 
   const api = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -205,6 +207,7 @@ export default function NumbersClient() {
     setCheckFor(same ? "" : number);
     setDiag(null);
     setCheckErr("");
+    setTrunkPick("");
     // The Account SID is the same for every number in the account, so carrying
     // it over saves retyping it. The token is deliberately not carried over.
     setCheckToken("");
@@ -221,6 +224,7 @@ export default function NumbersClient() {
           auth_token: checkToken.trim(),
           phone_number: number,
           repair: shouldRepair,
+          trunk_sid: trunkPick,
         }),
       });
       setDiag(json as Diagnosis);
@@ -676,6 +680,31 @@ export default function NumbersClient() {
                           </div>
                         </div>
                       ))}
+
+                      {diag.candidate_trunks.length > 0 ? (
+                        <div style={{ marginTop: 14 }}>
+                          <label style={lbl}>Which trunk should this number use?</label>
+                          <select
+                            style={field}
+                            value={trunkPick}
+                            onChange={(e) => setTrunkPick(e.target.value)}
+                          >
+                            <option value="">Select a trunk…</option>
+                            {diag.candidate_trunks.map((t) => (
+                              <option key={t.sid} value={t.sid}>
+                                {t.friendly_name || "(unnamed)"} — {t.domain_name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            style={{ ...btn(true), marginTop: 12 }}
+                            onClick={() => runCheck(n.phone_number, false)}
+                            disabled={checkBusy || !trunkPick}
+                          >
+                            Check this trunk
+                          </button>
+                        </div>
+                      ) : null}
 
                       {diag.steps && diag.steps.length > 0 ? (
                         <ul

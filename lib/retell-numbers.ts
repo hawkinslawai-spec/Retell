@@ -66,11 +66,20 @@ export async function listAgents(): Promise<RetellAgent[]> {
  * which is what the inbound diagnostics need.
  */
 export async function terminationUriFor(phoneNumber: string): Promise<string> {
-  const retell = getRetell();
-  const row = (await retell.phoneNumber.retrieve(phoneNumber)) as unknown as Record<
-    string,
-    unknown
-  >;
+  // Read over REST rather than through the SDK. The typed client drops fields
+  // it doesn't model, and termination_uri is one of them — going through it
+  // returns an empty string for a number that plainly has a trunk.
+  const apiKey = process.env.RETELL_API_KEY;
+  if (!apiKey) throw new Error("Missing RETELL_API_KEY environment variable");
+
+  const res = await fetch(
+    `https://api.retellai.com/get-phone-number/${encodeURIComponent(phoneNumber)}`,
+    { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store" }
+  );
+
+  if (!res.ok) return "";
+
+  const row = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   return String(row.termination_uri ?? "");
 }
 
