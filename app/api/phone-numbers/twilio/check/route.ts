@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkAdmin } from "@/lib/auth";
-import { diagnose, repair } from "@/lib/twilio-diagnose";
+import { diagnose, recentActivity, repair } from "@/lib/twilio-diagnose";
 import { terminationUriFor } from "@/lib/retell-numbers";
 
 export const runtime = "nodejs";
@@ -51,14 +51,20 @@ export async function POST(req: NextRequest) {
 
     const creds = { accountSid, authToken };
 
+    // Activity is fetched alongside the configuration checks, never instead of
+    // them. A trunk that looks perfect and a call log that is empty is the
+    // combination that tells you to stop looking at the trunk.
+    const activity = recentActivity(creds, phone).catch(() => ({ calls: [], alerts: [] }));
+
     if (shouldRepair) {
       const { steps, diagnosis } = await repair(creds, phone, terminationUri, chosenTrunkSid);
-      return NextResponse.json({ repaired: true, steps, ...diagnosis });
+      return NextResponse.json({ repaired: true, steps, ...diagnosis, ...(await activity) });
     }
 
     return NextResponse.json({
       repaired: false,
       ...(await diagnose(creds, phone, terminationUri, chosenTrunkSid)),
+      ...(await activity),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Check failed";

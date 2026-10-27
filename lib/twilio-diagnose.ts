@@ -144,6 +144,83 @@ function resolveTrunk(
   return { trunk: null, source: "none" };
 }
 
+export type TwilioCall = {
+  sid: string;
+  from: string;
+  status: string;
+  direction: string;
+  started: string;
+  duration: string;
+};
+
+export type TwilioAlert = {
+  sid: string;
+  error_code: string;
+  text: string;
+  date: string;
+};
+
+/**
+ * What Twilio itself saw.
+ *
+ * This is the question every other check dances around: did the call reach
+ * Twilio at all? An empty log means the problem is upstream of everything
+ * configurable here — the wrong number was dialled, or the number isn't
+ * reachable from the PSTN — and no amount of trunk fiddling will help.
+ */
+export async function recentActivity(
+  creds: TwilioCreds,
+  phone: string
+): Promise<{ calls: TwilioCall[]; alerts: TwilioAlert[] }> {
+  const callQuery = new URLSearchParams({ To: phone, PageSize: "20" });
+
+  const [callRes, alertRes] = await Promise.all([
+    twilio<{
+      calls?: {
+        sid: string;
+        from: string;
+        status: string;
+        direction: string;
+        start_time: string | null;
+        date_created: string;
+        duration: string | null;
+      }[];
+    }>(creds, "GET", `${API}/Accounts/${creds.accountSid}/Calls.json?${callQuery}`),
+
+    // Twilio's debugger. A SIP failure that never becomes a call still lands
+    // here, with the reason.
+    twilio<{
+      alerts?: {
+        sid: string;
+        error_code: string;
+        alert_text: string;
+        date_created: string;
+      }[];
+    }>(creds, "GET", `https://monitor.twilio.com/v1/Alerts?PageSize=10`).catch(() => ({
+      alerts: [],
+    })),
+  ]);
+
+  return {
+    calls: (callRes.calls || []).map((c) => ({
+      sid: c.sid,
+      from: c.from || "unknown",
+      status: c.status,
+      direction: c.direction,
+      started: c.start_time || c.date_created,
+      duration: c.duration || "0",
+    })),
+    alerts: (alertRes.alerts || []).map((a) => ({
+      sid: a.sid,
+      error_code: a.error_code,
+      // Alert text is a URL-encoded blob of debugging fields; the first few
+      // are the useful ones and the rest is noise in a narrow column.
+      text: decodeURIComponent(a.alert_text || "").slice(0, 300),
+      date: a.date_created,
+    })),
+  };
+}
+
 export async function diagnose(
   creds: TwilioCreds,
   phone: string,

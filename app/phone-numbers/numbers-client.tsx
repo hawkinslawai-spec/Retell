@@ -31,6 +31,8 @@ type Diagnosis = {
   inbound_ready: boolean;
   repairable: boolean;
   candidate_trunks: { sid: string; friendly_name: string; domain_name: string }[];
+  calls: { sid: string; from: string; status: string; direction: string; started: string; duration: string }[];
+  alerts: { sid: string; error_code: string; text: string; date: string }[];
   steps?: string[];
 };
 
@@ -680,6 +682,78 @@ export default function NumbersClient() {
                           </div>
                         </div>
                       ))}
+
+                      <div
+                        style={{
+                          marginTop: 16,
+                          paddingTop: 14,
+                          borderTop: `1px solid ${C.hairline}`,
+                        }}
+                      >
+                        <div style={{ fontSize: 12.5, color: C.text, marginBottom: 8 }}>
+                          Calls Twilio has seen to this number
+                        </div>
+
+                        {(diag.calls || []).length === 0 ? (
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: 12,
+                              color: C.oxbloodText,
+                              lineHeight: 1.7,
+                              maxWidth: "62ch",
+                            }}
+                          >
+                            None. Twilio has no record of anyone ringing this number, so the call
+                            isn&apos;t reaching Twilio in the first place &mdash; the trunk
+                            can&apos;t be the problem. Either a different number is being dialled,
+                            or this number isn&apos;t reachable on the public network yet.
+                          </p>
+                        ) : (
+                          <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.9 }}>
+                            {diag.calls.slice(0, 8).map((c) => (
+                              <div key={c.sid} style={{ fontFamily: "ui-monospace, monospace" }}>
+                                {c.started} · from {c.from} ·{" "}
+                                <span
+                                  style={{
+                                    color:
+                                      c.status === "completed"
+                                        ? C.green
+                                        : c.status === "in-progress" || c.status === "ringing"
+                                        ? C.brassText
+                                        : C.red,
+                                  }}
+                                >
+                                  {c.status}
+                                </span>{" "}
+                                · {c.duration}s
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {(diag.alerts || []).length > 0 ? (
+                          <div style={{ marginTop: 12 }}>
+                            <div style={{ fontSize: 12.5, color: C.text, marginBottom: 6 }}>
+                              Twilio debugger
+                            </div>
+                            {diag.alerts.slice(0, 4).map((a) => (
+                              <div
+                                key={a.sid}
+                                style={{
+                                  fontSize: 11.5,
+                                  color: C.oxbloodText,
+                                  lineHeight: 1.6,
+                                  marginBottom: 6,
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {a.date} · {a.error_code} · {a.text}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
 
                       {diag.candidate_trunks.length > 0 ? (
                         <div style={{ marginTop: 14 }}>
