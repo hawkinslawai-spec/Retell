@@ -5,14 +5,8 @@ import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { isSmsConfigured } from "@/lib/sms";
 import { checkAdmin } from "@/lib/auth";
 import { appBaseUrl } from "@/lib/retell-agents";
-import {
-  TIMEZONE,
-  BUSINESS_START_HOUR,
-  BUSINESS_END_HOUR,
-  WORKING_DAYS,
-  APPOINTMENT_MINUTES,
-  BRAND_NAME,
-} from "@/lib/config";
+import { TIMEZONE, BRAND_NAME } from "@/lib/config";
+import { officeStatus } from "@/lib/hawkins/hours";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,8 +21,6 @@ function mask(value: string): string {
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
 }
 
-const DAY_NAMES = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
 /**
  * Does this table exist and can we read it?
  *
@@ -41,14 +33,16 @@ async function probeTable(table: string): Promise<{ ok: boolean; count: number; 
   try {
     const { count, error } = await getSupabase()
       .from(table)
-      .select("id", { count: "exact", head: true });
+      .select("*", { count: "exact", head: true });
 
     if (error) {
       return {
         ok: false,
         count: 0,
-        error: error.message,
-        missing: error.code === "42P01" || /does not exist/i.test(error.message),
+        // Supabase sometimes returns an empty message with only a code, which
+        // reads as a blank failure and tells you nothing.
+        error: error.message || error.code || "unknown error",
+        missing: error.code === "42P01" || /does not exist/i.test(error.message || ""),
       };
     }
     return { ok: true, count: count ?? 0 };
@@ -249,22 +243,30 @@ export async function GET(req: NextRequest) {
   });
 
   // -------------------------------------------------------- Business rules
-  const hoursSane = BUSINESS_END_HOUR > BUSINESS_START_HOUR;
-  const daysSane = WORKING_DAYS.length > 0;
-
+  // Amy's hours come from lib/hawkins/hours.ts, not the environment, so this
+  // reports what she will actually tell a caller.
+  const status = await officeStatus();
   checks.push({
     id: "business_hours",
     label: "Opening hours",
-    status: hoursSane && daysSane ? "pass" : "fail",
-    detail: hoursSane && daysSane
-      ? `${BUSINESS_START_HOUR}:00–${BUSINESS_END_HOUR}:00, ${WORKING_DAYS.map((d) => DAY_NAMES[d]).join(", ")}, ${APPOINTMENT_MINUTES} min appointments`
-      : !daysSane
-      ? "WORKING_DAYS is empty — no day is bookable"
-      : `BUSINESS_END_HOUR (${BUSINESS_END_HOUR}) is not after BUSINESS_START_HOUR (${BUSINESS_START_HOUR})`,
-    fix:
-      hoursSane && daysSane
-        ? undefined
-        : "WORKING_DAYS uses 1=Monday to 7=Sunday, comma separated. Hours are 24-hour numbers.",
+    status: "pass",
+    detail: `Monday to Friday, 9:30am to 5:30pm, bank holidays closed. Right now: ${
+      status.officeOpen ? "open" : `closed (${status.reason})`
+    }. Next working day: ${status.nextWorkingDaySpoken}.`,
+  });
+
+  checks.push({
+    id: "bank_holidays",
+    label: "Bank holiday feed",
+    status: status.holidaysExpired ? "fail" : status.holidaysStale ? "warn" : "pass",
+    detail: status.holidaysExpired
+      ? "The GOV.UK feed is unreachable and the fallback list has run out — the office may show as open on a bank holiday"
+      : status.holidaysStale
+      ? "Using a cached or fallback list; the GOV.UK feed could not be read just now"
+      : "Live from gov.uk, england-and-wales",
+    fix: status.holidaysExpired
+      ? "Update FALLBACK_HOLIDAYS in lib/hawkins/hours.ts and redeploy."
+      : undefined,
   });
 
   const zoneValid = DateTime.now().setZone(TIMEZONE).isValid;

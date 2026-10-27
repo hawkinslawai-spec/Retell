@@ -191,7 +191,7 @@ export async function GET(req: NextRequest) {
     ] as [string, string][]) {
       const { error, count } = await getSupabase()
         .from(table)
-        .select("id", { count: "exact", head: true });
+        .select("*", { count: "exact", head: true });
 
       checks.push({
         id: `db_${table}`,
