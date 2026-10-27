@@ -251,14 +251,17 @@ export default function NumbersClient() {
     }
   }
 
-  const uriLooksOff = termUri.trim().length > 0 && !termUri.includes("pstn.twilio.com");
+  // The mistake worth catching is pasting Retell's own inbound address here.
+  // This field is where Retell sends calls TO — the carrier's host. Flagging
+  // "doesn't look like Twilio" instead would warn on every other carrier.
+  const uriLooksOff = /retellai\.com/i.test(termUri);
 
   return (
     <main style={{ maxWidth: 800, margin: "0 auto", padding: "48px 20px 80px" }}>
       <h1 style={pageTitle}>Phone numbers</h1>
       <p style={{ color: C.dim, marginTop: 0, fontSize: 14, lineHeight: 1.6 }}>
-        Import a Twilio number into Retell through your elastic SIP trunk, and bind it to an agent.
-        SIP credentials pass straight through to Retell &mdash; nothing is stored here.
+        Connect a number from any SIP carrier to Retell and bind it to an agent. SIP credentials
+        pass straight through to Retell &mdash; nothing is stored here.
       </p>
 
 
@@ -274,7 +277,7 @@ export default function NumbersClient() {
         <>
           <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
             <button style={btn(showImport)} onClick={() => setShowImport(!showImport)}>
-              {showImport ? "Cancel" : "Import Twilio number"}
+              {showImport ? "Cancel" : "Add a number"}
             </button>
             <button style={btn()} onClick={load} disabled={busy}>
               Refresh
@@ -368,16 +371,20 @@ export default function NumbersClient() {
                   style={field}
                   value={termUri}
                   onChange={(e) => setTermUri(e.target.value)}
-                  placeholder="your-trunk.pstn.twilio.com"
+                  placeholder="sip.yourcarrier.com"
                 />
                 {uriLooksOff ? (
                   <p style={{ fontSize: 12, color: C.oxbloodText, margin: "8px 0 0", lineHeight: 1.6 }}>
-                    Twilio termination URIs end in .pstn.twilio.com &mdash; check you copied the
-                    Termination SIP URI from the trunk, not the origination URI.
+                    That&apos;s Retell&apos;s own address. This field is where Retell sends calls
+                    <em> to</em> &mdash; your carrier&apos;s host. Retell&apos;s address goes on the
+                    carrier&apos;s side, as the destination for your number.
                   </p>
                 ) : (
                   <p style={{ fontSize: 12, color: C.faint, margin: "8px 0 0", lineHeight: 1.6 }}>
-                    Twilio console &rarr; Elastic SIP Trunking &rarr; your trunk &rarr; Termination.
+                    Your carrier&apos;s host. Twilio: the trunk&apos;s Termination SIP URI
+                    (<code>…pstn.twilio.com</code>). Others: the host they gave you &mdash; add
+                    <code> :port</code> only if it isn&apos;t 5060, and{" "}
+                    <code>;transport=tcp</code> if the trunk is TCP.
                   </p>
                 )}
               </div>
@@ -413,9 +420,41 @@ export default function NumbersClient() {
                   display: mode === "sip" ? "block" : "none",
                 }}
               >
-                From the credential list on your trunk. Retell also publishes a SIP SBC block
-                (18.98.16.120/30) if you prefer IP allowlisting.
+                The SIP credentials from your carrier &mdash; on Twilio, the trunk&apos;s credential
+                list; elsewhere, usually a trunk ID and password. Leave both blank if the carrier
+                authenticates by IP instead.
               </p>
+
+              {/* The failure this prevents is expensive: a number imported with
+                  perfect credentials still never rings, because nothing on the
+                  carrier's side points at Retell. It cost us an evening. */}
+              <div
+                style={{
+                  marginTop: 16,
+                  borderLeft: `2px solid ${C.brass}`,
+                  paddingLeft: 12,
+                  display: mode === "sip" ? "block" : "none",
+                }}
+              >
+                <p style={{ fontSize: 12.5, color: C.text, margin: 0, lineHeight: 1.7 }}>
+                  This form sets up <strong>outbound only</strong>.
+                </p>
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: C.faint,
+                    margin: "6px 0 0",
+                    lineHeight: 1.7,
+                    maxWidth: "62ch",
+                  }}
+                >
+                  For the number to <em>ring</em>, your carrier must route it to{" "}
+                  <code>sip:sip.retellai.com</code> and allow traffic from{" "}
+                  <code>18.98.16.120/30</code>, <code>143.223.88.0/21</code> and{" "}
+                  <code>161.115.160.0/19</code>. No credential typed here can substitute for that
+                  &mdash; without it the import succeeds and the phone stays silent.
+                </p>
+              </div>
 
               <div
                 style={{
