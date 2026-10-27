@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { C, FONT_SERIF, btn, fld } from "@/lib/ui";
 
 export default function LoginClient({ brand }: { brand: string }) {
   const [token, setToken] = useState("");
@@ -37,69 +38,75 @@ export default function LoginClient({ brand }: { brand: string }) {
         padding: 24,
       }}
     >
-      <div style={{ width: "100%", maxWidth: 380 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 28 }}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              background: "linear-gradient(135deg,#4d7fe0,#8b5fd6)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            ◆
-          </div>
-          <span style={{ fontSize: 18, fontWeight: 600, letterSpacing: -0.2 }}>{brand}</span>
+      <div style={{ width: "100%", maxWidth: 360 }}>
+        {/* The firm's name in the serif, as on letterhead — no logo mark.
+            An invented diamond glyph on a law firm's sign-in page reads as a
+            template nobody bothered to finish. */}
+        <div
+          style={{
+            fontFamily: FONT_SERIF,
+            fontSize: 21,
+            fontWeight: 600,
+            letterSpacing: 0.1,
+            color: C.text,
+          }}
+        >
+          {brand}
         </div>
+        <div style={{ fontSize: 12.5, color: C.faint, marginTop: 3 }}>Reception console</div>
 
-        <h1 style={{ fontSize: 20, fontWeight: 500, margin: "0 0 6px" }}>Sign in</h1>
-        <p style={{ color: "#8b98a9", fontSize: 14, marginTop: 0, marginBottom: 22 }}>
-          You&apos;ll stay signed in on this device for 30 days.
-        </p>
+        <div
+          style={{
+            borderTop: `1px solid ${C.border}`,
+            margin: "22px 0 20px",
+          }}
+        />
 
-        {err ? <p style={{ color: "#ff6b6b", fontSize: 13, marginBottom: 14 }}>{err}</p> : null}
+        <label htmlFor="token" style={{ display: "block", fontSize: 13, color: C.dim, marginBottom: 8 }}>
+          Access token
+        </label>
 
         <input
-          style={{
-            width: "100%",
-            background: "#0e1217",
-            border: "1px solid #232a33",
-            borderRadius: 9,
-            color: "#e7ecf3",
-            padding: "11px 13px",
-            fontSize: 14,
-            boxSizing: "border-box",
-          }}
+          id="token"
+          style={fld}
           type="password"
           value={token}
           onChange={(e) => setToken(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && token && signIn()}
-          placeholder="Access token"
           autoFocus
         />
+
+        {err && (
+          <div
+            style={{
+              marginTop: 12,
+              borderLeft: `2px solid ${C.oxblood}`,
+              paddingLeft: 12,
+              color: C.oxbloodText,
+              fontSize: 13,
+            }}
+          >
+            {err}
+          </div>
+        )}
 
         <button
           onClick={signIn}
           disabled={busy || !token}
           style={{
+            ...btn("primary"),
             width: "100%",
             marginTop: 14,
-            background: "linear-gradient(135deg,#4d7fe0,#8b5fd6)",
-            border: "none",
-            color: "#fff",
-            borderRadius: 10,
-            padding: "12px 20px",
-            fontSize: 14.5,
-            fontWeight: 500,
             cursor: busy || !token ? "default" : "pointer",
-            opacity: busy || !token ? 0.6 : 1,
+            opacity: busy || !token ? 0.5 : 1,
           }}
         >
-          {busy ? "Signing in…" : "Sign in"}
+          {busy ? "Signing in" : "Sign in"}
         </button>
+
+        <p style={{ fontSize: 12.5, color: C.faint, marginTop: 16, lineHeight: 1.6 }}>
+          You&apos;ll stay signed in on this device for 30 days.
+        </p>
       </div>
     </main>
   );
