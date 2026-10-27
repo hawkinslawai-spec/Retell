@@ -9,11 +9,11 @@
  * this request and discarded.
  */
 
-const TRUNKING = "https://trunking.twilio.com/v1";
-const API = "https://api.twilio.com/2010-04-01";
+export const TRUNKING = "https://trunking.twilio.com/v1";
+export const API = "https://api.twilio.com/2010-04-01";
 
 /** Retell's inbound SIP server. Calls to your Twilio number get sent here. */
-const RETELL_SIP_URI = "sip:sip.retellai.com";
+export const RETELL_SIP_URI = "sip:sip.retellai.com";
 
 export type TwilioCreds = { accountSid: string; authToken: string };
 
@@ -21,7 +21,7 @@ function authHeader({ accountSid, authToken }: TwilioCreds): string {
   return `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`;
 }
 
-async function twilio<T>(
+export async function twilio<T>(
   creds: TwilioCreds,
   method: "GET" | "POST" | "DELETE",
   url: string,

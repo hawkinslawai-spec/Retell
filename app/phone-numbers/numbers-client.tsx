@@ -13,6 +13,32 @@ type RetellNumber = {
 
 type Agent = { agent_id: string; agent_name: string };
 
+type TrunkCheck = {
+  id: string;
+  label: string;
+  status: "pass" | "fail" | "warn";
+  detail: string;
+  fix?: string;
+};
+
+type Diagnosis = {
+  account_name: string;
+  phone_number: string;
+  termination_uri: string;
+  trunk_sid: string | null;
+  trunk_name: string | null;
+  checks: TrunkCheck[];
+  inbound_ready: boolean;
+  repairable: boolean;
+  steps?: string[];
+};
+
+const DOT: Record<TrunkCheck["status"], string> = {
+  pass: C.green,
+  warn: C.brass,
+  fail: C.red,
+};
+
 
 const card: React.CSSProperties = {
   background: C.slate,
@@ -65,6 +91,14 @@ export default function NumbersClient() {
   const [nickname, setNickname] = useState("");
   const [inboundAgent, setInboundAgent] = useState("");
   const [outboundAgent, setOutboundAgent] = useState("");
+
+  // Inbound diagnostics, scoped to one number at a time.
+  const [checkFor, setCheckFor] = useState("");
+  const [checkSid, setCheckSid] = useState("");
+  const [checkToken, setCheckToken] = useState("");
+  const [checkBusy, setCheckBusy] = useState(false);
+  const [checkErr, setCheckErr] = useState("");
+  const [diag, setDiag] = useState<Diagnosis | null>(null);
 
   const api = useCallback(
     async (path: string, init?: RequestInit) => {
@@ -163,6 +197,38 @@ export default function NumbersClient() {
       setNoteBad(true);
     } finally {
       setBusy(false);
+    }
+  }
+
+  function openCheck(number: string) {
+    const same = checkFor === number;
+    setCheckFor(same ? "" : number);
+    setDiag(null);
+    setCheckErr("");
+    // The Account SID is the same for every number in the account, so carrying
+    // it over saves retyping it. The token is deliberately not carried over.
+    setCheckToken("");
+  }
+
+  async function runCheck(number: string, shouldRepair: boolean) {
+    setCheckBusy(true);
+    setCheckErr("");
+    try {
+      const json = await api("/api/phone-numbers/twilio/check", {
+        method: "POST",
+        body: JSON.stringify({
+          account_sid: checkSid.trim(),
+          auth_token: checkToken.trim(),
+          phone_number: number,
+          repair: shouldRepair,
+        }),
+      });
+      setDiag(json as Diagnosis);
+    } catch (err) {
+      setCheckErr(err instanceof Error ? err.message : "Check failed");
+      setDiag(null);
+    } finally {
+      setCheckBusy(false);
     }
   }
 
@@ -436,7 +502,14 @@ export default function NumbersClient() {
                 ) : null}
                 <span style={{ fontSize: 12, color: C.faint }}>{n.type}</span>
                 <button
-                  style={{ ...btn(), marginLeft: "auto", color: C.red }}
+                  style={{ ...btn(checkFor === n.phone_number), marginLeft: "auto" }}
+                  onClick={() => openCheck(n.phone_number)}
+                  disabled={busy}
+                >
+                  Inbound check
+                </button>
+                <button
+                  style={{ ...btn(), color: C.red }}
                   onClick={() => remove(n.phone_number)}
                   disabled={busy}
                 >
@@ -452,6 +525,190 @@ export default function NumbersClient() {
                 <p style={{ fontSize: 12, color: C.oxbloodText, margin: "8px 0 0", lineHeight: 1.6 }}>
                   No outbound agent bound &mdash; campaigns using this number will fail.
                 </p>
+              ) : null}
+
+              {checkFor === n.phone_number ? (
+                <div
+                  style={{
+                    marginTop: 16,
+                    paddingTop: 16,
+                    borderTop: `1px solid ${C.hairline}`,
+                  }}
+                >
+                  <p
+                    style={{
+                      margin: "0 0 14px",
+                      fontSize: 12.5,
+                      color: C.dim,
+                      lineHeight: 1.7,
+                      maxWidth: "62ch",
+                    }}
+                  >
+                    Importing a number sets up outbound calling only. Inbound is configured on the
+                    Twilio trunk, and when it&apos;s wrong the caller hears nothing and no call
+                    appears in Retell at all. This reads the live trunk and can fix it. Credentials
+                    are used for the request and never stored.
+                  </p>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <label style={lbl}>Account SID</label>
+                      <input
+                        style={field}
+                        value={checkSid}
+                        onChange={(e) => setCheckSid(e.target.value)}
+                        placeholder="AC…"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div>
+                      <label style={lbl}>Auth Token</label>
+                      <input
+                        style={field}
+                        type="password"
+                        value={checkToken}
+                        onChange={(e) => setCheckToken(e.target.value)}
+                        autoComplete="off"
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+                    <button
+                      style={btn(true)}
+                      onClick={() => runCheck(n.phone_number, false)}
+                      disabled={checkBusy || !checkSid.trim() || !checkToken.trim()}
+                    >
+                      {checkBusy ? "Checking…" : "Run check"}
+                    </button>
+
+                    {diag?.repairable ? (
+                      <button
+                        style={btn()}
+                        onClick={() => runCheck(n.phone_number, true)}
+                        disabled={checkBusy}
+                      >
+                        Fix it
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {checkErr ? (
+                    <p
+                      style={{
+                        margin: "14px 0 0",
+                        fontSize: 12.5,
+                        color: C.red,
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      {checkErr}
+                    </p>
+                  ) : null}
+
+                  {diag ? (
+                    <div style={{ marginTop: 16 }}>
+                      <p
+                        style={{
+                          margin: "0 0 12px",
+                          fontSize: 13,
+                          color: diag.inbound_ready ? C.green : C.oxbloodText,
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        {diag.inbound_ready
+                          ? "Inbound calls will reach Retell."
+                          : "Inbound calls will not reach Retell."}
+                      </p>
+
+                      {diag.checks.map((c) => (
+                        <div
+                          key={c.id}
+                          style={{
+                            display: "flex",
+                            gap: 10,
+                            padding: "7px 0",
+                            borderTop: `1px solid ${C.hairline}`,
+                            alignItems: "baseline",
+                          }}
+                        >
+                          <span
+                            aria-hidden
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: 3,
+                              background: DOT[c.status],
+                              flexShrink: 0,
+                              transform: "translateY(-1px)",
+                            }}
+                          />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, color: C.text }}>{c.label}</div>
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: C.faint,
+                                lineHeight: 1.6,
+                                wordBreak: "break-word",
+                              }}
+                            >
+                              {c.detail}
+                            </div>
+                            {c.fix ? (
+                              <div
+                                style={{
+                                  fontSize: 12,
+                                  color: C.brassText,
+                                  lineHeight: 1.6,
+                                  marginTop: 3,
+                                }}
+                              >
+                                {c.fix}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+
+                      {diag.steps && diag.steps.length > 0 ? (
+                        <ul
+                          style={{
+                            margin: "14px 0 0",
+                            padding: "0 0 0 18px",
+                            fontSize: 12.5,
+                            color: C.dim,
+                            lineHeight: 1.9,
+                          }}
+                        >
+                          {diag.steps.map((s) => (
+                            <li key={s}>{s}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+
+                      {diag.inbound_ready ? (
+                        <p
+                          style={{
+                            margin: "14px 0 0",
+                            fontSize: 12,
+                            color: C.faint,
+                            lineHeight: 1.7,
+                          }}
+                        >
+                          Twilio can take a minute to apply a routing change. Place one real call to
+                          confirm, and check it appears in Retell&apos;s call history.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           ))}

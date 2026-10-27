@@ -60,6 +60,20 @@ export async function listAgents(): Promise<RetellAgent[]> {
   return agents;
 }
 
+/**
+ * The trunk Retell sends outbound calls to. It's also the only reliable way to
+ * work out which of several Twilio trunks a number is supposed to be using,
+ * which is what the inbound diagnostics need.
+ */
+export async function terminationUriFor(phoneNumber: string): Promise<string> {
+  const retell = getRetell();
+  const row = (await retell.phoneNumber.retrieve(phoneNumber)) as unknown as Record<
+    string,
+    unknown
+  >;
+  return String(row.termination_uri ?? "");
+}
+
 export type ImportInput = {
   phoneNumber: string;
   terminationUri: string;
