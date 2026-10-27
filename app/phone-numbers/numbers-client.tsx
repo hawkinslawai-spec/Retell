@@ -437,7 +437,7 @@ export default function NumbersClient() {
                 }}
               >
                 <p style={{ fontSize: 12.5, color: C.text, margin: 0, lineHeight: 1.7 }}>
-                  This form sets up <strong>outbound only</strong>.
+                  One more step, on your carrier.
                 </p>
                 <p
                   style={{
@@ -448,11 +448,12 @@ export default function NumbersClient() {
                     maxWidth: "62ch",
                   }}
                 >
-                  For the number to <em>ring</em>, your carrier must route it to{" "}
-                  <code>sip:sip.retellai.com</code> and allow traffic from{" "}
-                  <code>18.98.16.120/30</code>, <code>143.223.88.0/21</code> and{" "}
-                  <code>161.115.160.0/19</code>. No credential typed here can substitute for that
-                  &mdash; without it the import succeeds and the phone stays silent.
+                  This sets up Retell&apos;s side of the number &mdash; which agent answers it, and
+                  how outbound calls are placed. It can&apos;t make calls <em>arrive</em>: your
+                  carrier must route the number to <code>sip:sip.retellai.com</code> and allow
+                  traffic from <code>18.98.16.120/30</code>, <code>143.223.88.0/21</code> and{" "}
+                  <code>161.115.160.0/19</code>. Nothing typed here substitutes for that &mdash;
+                  without it the import succeeds and the phone stays silent.
                 </p>
               </div>
 
