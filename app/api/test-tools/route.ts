@@ -7,6 +7,8 @@ import { appBaseUrl } from "@/lib/retell-agents";
 import { getRetell } from "@/lib/retell-client";
 import { isSmsConfigured } from "@/lib/sms";
 import { isEmailConfigured } from "@/lib/email";
+import { STAFF, GENERAL_EMAIL } from "@/lib/hawkins/firm";
+import { amyAgentIds } from "@/lib/hawkins/agent";
 import { createAppointment, cancelAppointment, getBusyIntervals } from "@/lib/appointments";
 import { businessWindow, generateOpenSlots, now as businessNow } from "@/lib/slots";
 import { VERIFY_SIGNATURE, TIMEZONE, APPOINTMENT_MINUTES } from "@/lib/config";
@@ -41,17 +43,33 @@ export async function GET(req: NextRequest) {
 
   const settings = await getAgentSettings(agentId);
 
+  /**
+   * Is this Amy?
+   *
+   * Amy's staff, routing, transfer behaviour and message recipients all live
+   * in lib/hawkins/*, not in the agent_settings table — deliberately, so a
+   * law firm's routing can't be changed by whoever can reach the console.
+   *
+   * The per-agent checks below read agent_settings, so without this they
+   * report a confident FAIL on a perfectly healthy Amy ("screening is on but
+   * no transfer number is set") purely because she has no row. A diagnostic
+   * that cries wolf on the production agent is worse than no diagnostic.
+   */
+  const isAmy = (await amyAgentIds()).includes(agentId);
+
   // ------------------------------------------------------- what's configured
   checks.push({
     id: "resolved",
     label: "Resolved settings",
     status: "pass",
-    detail: [
-      `timezone: ${settings.timezone}`,
-      `transfer: ${settings.transferMode}${settings.transferNumber ? ` → ${settings.transferNumber}` : " (no number)"}`,
-      `summary email: ${settings.summaryEmail || "(none)"}`,
-      `custom logs: ${settings.customLogs.map((l) => l.label).join(", ") || "(none)"}`,
-    ].join(" · "),
+    detail: isAmy
+      ? `Amy — configured in code (lib/hawkins). Staff: ${STAFF.length}. Timezone: Europe/London.`
+      : [
+          `timezone: ${settings.timezone}`,
+          `transfer: ${settings.transferMode}${settings.transferNumber ? ` → ${settings.transferNumber}` : " (no number)"}`,
+          `summary email: ${settings.summaryEmail || "(none)"}`,
+          `custom logs: ${settings.customLogs.map((l) => l.label).join(", ") || "(none)"}`,
+        ].join(" · "),
   });
 
   const base = appBaseUrl();
@@ -186,7 +204,72 @@ export async function GET(req: NextRequest) {
   }
 
   // --------------------------------------------------------- screened transfer
-  if (settings.transferMode === "screen") {
+  if (isAmy) {
+    // Amy's six transfer tools and her screening agent are what matter, not
+    // a transfer_number column she never reads.
+    try {
+      const agent = (await getRetell().agent.retrieve(agentId)) as unknown as Record<string, unknown>;
+      const engine = (agent.response_engine || {}) as Record<string, unknown>;
+      const llmId = String(engine.llm_id ?? "");
+      const llm = llmId
+        ? ((await getRetell().llm.retrieve(llmId)) as unknown as Record<string, unknown>)
+        : {};
+      const tools = Array.isArray(llm.general_tools) ? llm.general_tools : [];
+      const names = tools.map((t) => String((t as Record<string, unknown>).name ?? ""));
+
+      const expected = [
+        "note_caller_details",
+        ...STAFF.map((st) => `transfer_to_${st.id}`),
+        "send_message",
+        "get_client_account_details",
+        "end_call",
+      ];
+      const missing = expected.filter((n) => !names.includes(n));
+
+      checks.push({
+        id: "amy_tools",
+        label: "Amy's tools",
+        status: missing.length === 0 ? "pass" : "fail",
+        detail:
+          missing.length === 0
+            ? `All ${expected.length} present`
+            : `Missing: ${missing.join(", ")}`,
+        fix:
+          missing.length === 0
+            ? undefined
+            : "POST /api/hawkins/provision with this agent_id to rebuild the tool set.",
+      });
+
+      // The keypress guard. Without a transfer agent behind the transfer
+      // tools, a call can be bridged into voicemail — which Section 7 of the
+      // specification exists to prevent.
+      const transferTool = tools.find((t) =>
+        String((t as Record<string, unknown>).name ?? "").startsWith("transfer_to_")
+      ) as Record<string, unknown> | undefined;
+      const option = (transferTool?.transfer_option || {}) as Record<string, unknown>;
+      const agentic = String(option.type ?? "") === "agentic_warm_transfer";
+
+      checks.push({
+        id: "screen",
+        label: "Whisper and keypress",
+        status: agentic ? "pass" : "fail",
+        detail: agentic
+          ? "Transfers screen the staff member and require a keypress before bridging"
+          : `Transfers are "${String(option.type ?? "not set")}" — no keypress guard, so a call could be bridged into voicemail`,
+        fix: agentic
+          ? undefined
+          : "Re-run POST /api/hawkins/provision. If the screening agent still fails to build, check the logs for [hawkins].",
+      });
+    } catch (err) {
+      checks.push({
+        id: "amy_tools",
+        label: "Amy's tools",
+        status: "fail",
+        detail: errText(err),
+        fix: "Check RETELL_API_KEY and that the agent id is right.",
+      });
+    }
+  } else if (settings.transferMode === "screen") {
     if (!settings.transferNumber) {
       checks.push({
         id: "screen",
@@ -230,10 +313,20 @@ export async function GET(req: NextRequest) {
   // ------------------------------------------------------------- notifications
   checks.push({
     id: "email_target",
-    label: "Summary email",
-    status: settings.summaryEmail && isEmailConfigured() ? "pass" : "warn",
+    label: isAmy ? "Message email" : "Summary email",
+    status: isAmy
+      ? isEmailConfigured()
+        ? "pass"
+        : "fail"
+      : settings.summaryEmail && isEmailConfigured()
+      ? "pass"
+      : "warn",
     detail: !isEmailConfigured()
-      ? "SMTP is not configured — no summaries will be sent"
+      ? isAmy
+        ? "SMTP is not configured — every message Amy takes would fail to reach anyone"
+        : "SMTP is not configured — no summaries will be sent"
+      : isAmy
+      ? `Messages route to the staff in lib/hawkins/firm.ts, cc ${GENERAL_EMAIL}`
       : settings.summaryEmail
       ? `${settings.summaryEmail} · ${settings.emailEveryCall ? "every call" : settings.emailOnTransfer ? "transfers only" : "nothing selected"}`
       : "No recipient set for this agent",
@@ -244,7 +337,7 @@ export async function GET(req: NextRequest) {
       : "Add an address under Email call summaries on this agent.",
   });
 
-  checks.push({
+  if (!isAmy) checks.push({
     id: "sms",
     label: "Text alerts",
     status: isSmsConfigured() && settings.alertNumber ? "pass" : "warn",

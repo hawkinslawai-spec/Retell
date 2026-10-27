@@ -372,3 +372,34 @@ export function amyTools(screenAgentId: string) {
     },
   ] as ReturnType<typeof Array.prototype.concat>;
 }
+
+/**
+ * Which Retell agents are Amy?
+ *
+ * Identified by name rather than a hardcoded id, so this keeps working after
+ * the agent is rebuilt or a second one is made for staging. The screening
+ * agent is excluded — it is an Amy component, not an Amy.
+ *
+ * Returns an empty list rather than throwing: this only drives which
+ * diagnostics run, and a Retell outage should not turn the setup page into
+ * an error.
+ */
+export async function amyAgentIds(): Promise<string[]> {
+  try {
+    const res = await getRetell().agent.list({ limit: 100 });
+    const rows = Array.isArray(res)
+      ? res
+      : ((res as { items?: unknown[] })?.items ?? []);
+
+    return (rows as Record<string, unknown>[])
+      .filter((a) => {
+        const name = String(a.agent_name ?? "").toLowerCase();
+        return name.startsWith("amy") && !name.includes("screener");
+      })
+      .map((a) => String(a.agent_id ?? ""))
+      .filter(Boolean);
+  } catch (err) {
+    console.error("[hawkins] could not list agents:", err);
+    return [];
+  }
+}

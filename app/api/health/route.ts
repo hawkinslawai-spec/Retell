@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import { isEmailConfigured, verifyEmail } from "@/lib/email";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import { isSmsConfigured } from "@/lib/sms";
+import { checkAdmin } from "@/lib/auth";
 import { appBaseUrl } from "@/lib/retell-agents";
 import {
   TIMEZONE,
@@ -59,20 +60,31 @@ async function probeTable(table: string): Promise<{ ok: boolean; count: number; 
 export async function GET(req: NextRequest) {
   const expected = process.env.SETUP_TOKEN;
 
-  if (!expected) {
-    return NextResponse.json(
-      {
-        disabled: true,
-        message:
-          "Diagnostics are switched off. Add a SETUP_TOKEN environment variable in Vercel to enable this page, and remove it once the client is live.",
-      },
-      { status: 404 }
-    );
-  }
-
+  // Two ways in: the setup token, or an ordinary signed-in admin session.
+  //
+  // The token exists so these checks can be run before anyone has logged in,
+  // and it is meant to be deleted once the firm is live. Accepting the admin
+  // cookie as well means the checks stay usable afterwards — otherwise the
+  // only way to verify SMTP on a live deployment is to re-add a token that
+  // the setup guide tells you to remove.
+  const signedIn = checkAdmin(req).ok;
   const provided = req.headers.get("x-setup-token") || "";
-  if (provided !== expected) {
-    return NextResponse.json({ message: "Invalid setup token" }, { status: 401 });
+
+  if (!signedIn) {
+    if (!expected) {
+      return NextResponse.json(
+        {
+          disabled: true,
+          message:
+            "Diagnostics are switched off. Sign in to the console, or add a SETUP_TOKEN environment variable in Vercel.",
+        },
+        { status: 404 }
+      );
+    }
+
+    if (provided !== expected) {
+      return NextResponse.json({ message: "Invalid setup token" }, { status: 401 });
+    }
   }
 
   const checks: Check[] = [];
