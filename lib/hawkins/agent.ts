@@ -132,7 +132,18 @@ export async function upsertScreener(
       const engine = (existing.response_engine || {}) as Record<string, unknown>;
       const llmId = String(engine.llm_id ?? "");
 
-      if (llmId) {
+      // An agent built on an LLM that was created WITHOUT is_transfer_llm can
+      // never be repaired, because that flag is ignored on update. Reusing it
+      // would leave transfers silently without their keypress guard, so throw
+      // it away and build a fresh one instead.
+      const usable = existing.is_transfer_agent === true;
+      if (!usable) {
+        console.warn(
+          "[hawkins] the existing screening agent is not a transfer agent — building a new one."
+        );
+      }
+
+      if (llmId && usable) {
         await retell.llm.update(llmId, {
           model: SCREEN_MODEL as never,
           general_prompt: prompt,
@@ -152,12 +163,21 @@ export async function upsertScreener(
     const llm = await retell.llm.create({
       model: SCREEN_MODEL as never,
       general_prompt: prompt,
-      // No greeting: the staff member has just picked up a ringing phone, so
-      // the screener speaks first and immediately.
+      // No greeting text, but the screener must still speak first — the staff
+      // member has just picked up a ringing phone and silence reads as a dead
+      // line. start_speaker "agent" makes it open from the prompt.
       begin_message: null,
+      start_speaker: "agent",
       model_temperature: 0.2,
       general_tools: screenTools() as never,
-    });
+      // Required for the bridge_transfer and cancel_transfer tools, and for an
+      // agent built on this LLM to be accepted as a transfer agent. Without
+      // it Retell rejects the agent with "Retell LLM is not a transfer retell
+      // llm". Note it can ONLY be set at creation — it is ignored on update,
+      // so an LLM made without it can never become a transfer LLM and has to
+      // be replaced.
+      is_transfer_llm: true,
+    } as never);
 
     const agent = await retell.agent.create({
       agent_name: "Hawkins Law — call screener",
