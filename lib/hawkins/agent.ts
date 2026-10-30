@@ -28,8 +28,18 @@ const SCREEN_MODEL = "gpt-5.4-mini";
 
 /** 30 seconds ringing, per Section 7. */
 const RING_MS = 30000;
-/** 8 seconds for a keypress, repeated once, so ~20s of total decision time. */
-const DECIDE_MS = 20000;
+/**
+ * How long the screener has, from the moment the staff member answers, to
+ * get a decision. The whisper itself takes about 9 seconds to say, so this is
+ * not the time they have to press a key — it is the whole conversation.
+ *
+ * It was 20 seconds, which left roughly 10 after the whisper; staff reported
+ * being cut off before they could respond, especially when they'd picked up
+ * mid-sentence or asked who it was. 45 seconds covers the whisper, one repeat
+ * and a considered answer. The caller hears a ringtone throughout, not
+ * silence, so the longer window does not strand them.
+ */
+const DECIDE_MS = 45000;
 
 /**
  * What the screening agent says to the member of staff.
@@ -68,14 +78,26 @@ Decline — they press hash, or say anything meaning no: "take a message",
 "no", "I'm busy", "I'm with a client".
 → Say "No problem, I'll take a message." Then call cancel_transfer.
 
-No clear answer, silence, or an answering machine greeting.
-→ Call cancel_transfer. Never leave a voicemail message and never connect
-  the caller to voicemail. If you hear a recorded greeting of any kind,
-  cancel immediately.
+Not a decision yet — they say "hello?", "sorry?", "who is it?", "hang on",
+or anything else that is neither yes nor no. They have just picked up the
+phone and may have missed the start.
+→ Repeat the whole message once, calmly, then wait again. Do NOT cancel
+  because someone said hello or asked a question. Give them time.
+
+Silence after you have asked.
+→ Wait. If they still say nothing, repeat the message once. Only if they
+  stay silent after that second time, call cancel_transfer.
+
+An answering machine or voicemail greeting.
+→ Call cancel_transfer immediately. Never leave a voicemail message and
+  never connect the caller to voicemail. A recorded greeting of any kind
+  means cancel at once — this is the one case where you do not wait.
 
 ## Rules
-- One question, one answer, then a tool call. Do not chat.
-- If they say nothing at all, repeat the question once, then cancel.
+- Be patient. A person who has just answered a ringing phone needs a moment.
+  Only an explicit no, a hash press, voicemail, or silence after you have
+  asked twice ends the transfer.
+- Do not chat. Your only job is to get a yes or a no.
 - Never end without calling bridge_transfer or cancel_transfer — the caller
   is holding and would be stranded.
 - If they ask who is calling, repeat the caller's name and matter label and
@@ -97,7 +119,7 @@ function screenTools() {
       type: "cancel_transfer" as const,
       name: "cancel_transfer",
       description:
-        "Decline the transfer and return the caller to Amy. Call this when they press hash, say take a message, give no clear answer, or when you reach voicemail.",
+        "Decline the transfer and return the caller to Amy. Call this only when they press hash or clearly say no, when you reach voicemail or a recorded greeting, or when they have stayed silent after you have asked twice. Never call it because they said hello, asked who it is, or hesitated.",
       speak_during_execution: false,
     },
   ];
