@@ -63,6 +63,27 @@ export function toMinutes(hhmm: string): number | null {
   return h * 60 + min;
 }
 
+
+/**
+ * Has the table simply not been created yet?
+ *
+ * Postgres says 42P01. Newer Supabase (PostgREST 12+) answers first, from its
+ * schema cache, with PGRST205 and "Could not find the table". Checking only
+ * the Postgres code let the newer wording through as an opaque failure, so a
+ * save on an un-migrated database looked like it had simply not stuck.
+ */
+function isMissingTable(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false;
+  return (
+    err.code === "42P01" ||
+    err.code === "PGRST205" ||
+    /does not exist|could not find the table|schema cache/i.test(err.message || "")
+  );
+}
+
+const MIGRATION_HINT =
+  "The opening-hours tables don't exist yet, so nothing can be saved. Run supabase-migration-14.sql in the Supabase SQL editor, then save again.";
+
 type Cached = { at: number; value: Schedule };
 let cache: Cached | null = null;
 
@@ -93,11 +114,8 @@ export async function getSchedule(): Promise<Schedule> {
     ]);
 
     if (hoursRes.error) {
-      // 42P01 is "relation does not exist" — migration 14 hasn't been run.
-      const missing =
-        hoursRes.error.code === "42P01" || /does not exist/i.test(hoursRes.error.message || "");
       const value = defaults(
-        missing
+        isMissingTable(hoursRes.error)
           ? "office_hours table not found — run supabase-migration-14.sql"
           : hoursRes.error.message || hoursRes.error.code || "unknown error"
       );
@@ -237,10 +255,9 @@ export async function saveSchedule(
   if (hoursError) {
     return {
       ok: false,
-      message:
-        hoursError.code === "42P01"
-          ? "The office_hours table doesn't exist yet. Run supabase-migration-14.sql in the Supabase SQL editor."
-          : hoursError.message || hoursError.code || "Could not save hours",
+      message: isMissingTable(hoursError)
+        ? MIGRATION_HINT
+        : hoursError.message || hoursError.code || "Could not save hours",
     };
   }
 
@@ -253,7 +270,8 @@ export async function saveSchedule(
     .delete()
     .neq("closure_date", "1900-01-01");
 
-  if (wipeError && wipeError.code !== "42P01") {
+  if (wipeError) {
+    if (isMissingTable(wipeError)) return { ok: false, message: MIGRATION_HINT };
     return { ok: false, message: wipeError.message || "Could not update closure dates" };
   }
 
@@ -265,7 +283,8 @@ export async function saveSchedule(
         { onConflict: "closure_date" }
       );
 
-    if (insertError && insertError.code !== "42P01") {
+    if (insertError) {
+      if (isMissingTable(insertError)) return { ok: false, message: MIGRATION_HINT };
       return { ok: false, message: insertError.message || "Could not save closure dates" };
     }
   }

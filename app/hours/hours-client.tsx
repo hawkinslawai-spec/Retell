@@ -76,6 +76,10 @@ export default function HoursClient() {
   const [note, setNote] = useState("");
   const [bad, setBad] = useState(false);
   const [authed, setAuthed] = useState(false);
+  // Edits live only in the page until Save is pressed. Without a visible
+  // marker, changing a time and refreshing looks exactly like the change
+  // "reverting" — which is how this was reported.
+  const [dirty, setDirty] = useState(false);
 
   const api = useCallback(async (path: string, init?: RequestInit) => {
     const res = await fetch(path, {
@@ -96,6 +100,7 @@ export default function HoursClient() {
       setClosures(json.closures || []);
       setMeta(json);
       setAuthed(true);
+      setDirty(false);
     } catch (err) {
       setNote(err instanceof Error ? err.message : "Could not load hours");
       setBad(true);
@@ -111,7 +116,25 @@ export default function HoursClient() {
 
   function patch(weekday: number, change: Partial<Day>) {
     setDays((prev) => prev.map((d) => (d.weekday === weekday ? { ...d, ...change } : d)));
+    setDirty(true);
   }
+
+  function editClosures(update: (prev: Closure[]) => Closure[]) {
+    setClosures(update);
+    setDirty(true);
+  }
+
+  // The browser's own "leave site?" prompt on refresh or close while there
+  // are unsaved edits.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   async function save() {
     setBusy(true);
@@ -124,6 +147,7 @@ export default function HoursClient() {
       setDays(json.days || []);
       setClosures(json.closures || []);
       setMeta(json);
+      setDirty(false);
       setNote("Saved. Amy uses these from her next call.");
       setBad(false);
     } catch (err) {
@@ -306,7 +330,7 @@ export default function HoursClient() {
               type="date"
               value={c.date}
               onChange={(e) =>
-                setClosures((prev) =>
+                editClosures((prev) =>
                   prev.map((x, j) => (j === i ? { ...x, date: e.target.value } : x))
                 )
               }
@@ -316,14 +340,14 @@ export default function HoursClient() {
               placeholder="Reason (optional)"
               value={c.note}
               onChange={(e) =>
-                setClosures((prev) =>
+                editClosures((prev) =>
                   prev.map((x, j) => (j === i ? { ...x, note: e.target.value } : x))
                 )
               }
             />
             <button
               style={{ ...btn(), color: C.red, flexShrink: 0 }}
-              onClick={() => setClosures((prev) => prev.filter((_, j) => j !== i))}
+              onClick={() => editClosures((prev) => prev.filter((_, j) => j !== i))}
             >
               Remove
             </button>
@@ -332,15 +356,22 @@ export default function HoursClient() {
 
         <button
           style={{ ...btn(), marginTop: 6 }}
-          onClick={() => setClosures((prev) => [...prev, { date: "", note: "" }])}
+          onClick={() => editClosures((prev) => [...prev, { date: "", note: "" }])}
         >
           Add a closure date
         </button>
       </div>
 
-      <button style={{ ...btn(true), marginTop: 4 }} onClick={save} disabled={busy}>
-        {busy ? "Saving…" : "Save hours"}
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 4 }}>
+        <button style={btn(true)} onClick={save} disabled={busy}>
+          {busy ? "Saving…" : "Save hours"}
+        </button>
+        {dirty ? (
+          <span style={{ fontSize: 12.5, color: C.brassText }}>
+            Unsaved changes &mdash; they&apos;ll be lost if you leave or refresh.
+          </span>
+        ) : null}
+      </div>
 
       <p style={{ color: C.faint, fontSize: 12, marginTop: 24, lineHeight: 1.7, maxWidth: "64ch" }}>
         A call already in progress keeps the status it started with. A caller who reaches Amy at

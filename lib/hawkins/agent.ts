@@ -319,7 +319,16 @@ export function amyTools(screenAgentId: string) {
               "Say who is on the line and what it is about, in one sentence. Then stop.",
           },
         },
-    speak_during_execution: false,
+    // The hold line belongs to the tool, not the conversation. When the
+    // prompt told Amy to *say* "please hold" and then call the tool, the
+    // model would often say it, treat its turn as finished and wait for the
+    // caller — so nothing was dialled, and after the silence it invented
+    // "Mohshin isn't free just now" (call 0b302fb4…, 29 Oct). Spoken here,
+    // the words can only ever be heard because the transfer is starting.
+    // static_text so the wording is exact rather than paraphrased.
+    speak_during_execution: true,
+    execution_message_type: "static_text" as const,
+    execution_message_description: `Let me see if ${staff.firstName} is available. Please hold for a moment.`,
   }));
 
   return [
