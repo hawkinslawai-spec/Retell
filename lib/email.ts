@@ -49,6 +49,11 @@ function getTransport(): Transporter {
     // 465 is implicit TLS; 587 upgrades with STARTTLS. Getting this backwards
     // produces a connection that hangs rather than a clear error.
     secure: p === 465,
+    // On 587 (and 25) refuse to continue unless the server upgrades to TLS.
+    // Without this, nodemailer will happily send the mailbox password in
+    // plain text to a server that doesn't offer STARTTLS. Office 365 always
+    // offers it, so this only ever bites if something is badly wrong.
+    requireTLS: p !== 465,
     auth: {
       user,
       // Google shows app passwords as "abcd efgh ijkl mnop". The spaces are

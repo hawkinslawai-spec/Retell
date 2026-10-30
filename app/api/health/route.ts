@@ -223,6 +223,12 @@ export async function GET(req: NextRequest) {
         : result.error || "SMTP login failed",
       fix: result.ok
         ? undefined
+        : /office365|outlook/i.test(process.env.SMTP_HOST || "")
+        ? /535|5\.7\.139|5\.7\.3|authentication unsuccessful|basic authentication is disabled/i.test(
+            result.error || ""
+          )
+          ? "Microsoft rejected the login. Usually one of: SMTP AUTH is switched off for this mailbox (Microsoft 365 admin centre → Users → reception@ → Mail → Manage email apps → tick Authenticated SMTP); Security Defaults or MFA is blocking password logins for SMTP; or the password is wrong. Microsoft is retiring password-based SMTP at the end of December 2026."
+          : "Check SMTP_HOST is smtp.office365.com and SMTP_PORT is 587. Port 25 is blocked by most cloud hosts."
         : /invalid login|username and password not accepted|535|534/i.test(result.error || "")
         ? "Gmail rejected the login. It needs an App Password, not the account password — and App Passwords only appear once 2-Step Verification is on."
         : "Check SMTP_HOST and SMTP_PORT. Port 465 needs implicit TLS, 587 needs STARTTLS; the defaults (smtp.gmail.com / 465) are right for Gmail.",
