@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkAdmin } from "@/lib/auth";
 import { getRetell } from "@/lib/retell-client";
 import { appBaseUrl } from "@/lib/retell-agents";
-import { upsertScreener, amyTools } from "@/lib/hawkins/agent";
+import { upsertScreener, pruneScreeners, amyTools } from "@/lib/hawkins/agent";
 import { amyPrompt } from "@/lib/hawkins/prompt";
 import { STAFF } from "@/lib/hawkins/firm";
 import { officeStatus } from "@/lib/hawkins/hours";
@@ -63,7 +63,9 @@ export async function POST(req: NextRequest) {
   const warnings: string[] = [];
 
   try {
-    // 1. The screening agent that does the whisper.
+    // 1. The screening agent that does the whisper. upsertScreener finds an
+    //    existing one by name when none is passed, so repeated runs reuse it
+    //    rather than leaving a new screener behind each time.
     const screenAgentId = await upsertScreener(body.screen_agent_id || "", voiceId);
     if (!screenAgentId) {
       warnings.push(
@@ -127,6 +129,17 @@ export async function POST(req: NextRequest) {
       amyId = agent.agent_id;
     }
 
+    // 3. Tidy up. Done last and only once Amy's tools point at the keeper,
+    //    so a deleted screener is never the one a live transfer is using.
+    const removedScreeners = await pruneScreeners(screenAgentId).catch(() => [] as string[]);
+    if (removedScreeners.length > 0) {
+      warnings.push(
+        `Removed ${removedScreeners.length} leftover screening agent${
+          removedScreeners.length === 1 ? "" : "s"
+        } from earlier builds.`
+      );
+    }
+
     const status = await officeStatus();
     if (status.holidaysStale) {
       warnings.push(
@@ -139,6 +152,7 @@ export async function POST(req: NextRequest) {
       agent_id: amyId,
       llm_id: llmId,
       screen_agent_id: screenAgentId,
+      removed_screening_agents: removedScreeners,
       transfer_tools: STAFF.map((s) => `transfer_to_${s.id}`),
       inbound_webhook_url: `${base}/api/retell/inbound`,
       office_status: status,

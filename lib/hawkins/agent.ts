@@ -1,4 +1,4 @@
-import { getRetell } from "../retell-client";
+import { getRetell, unwrapList } from "../retell-client";
 import { appBaseUrl } from "../retell-agents";
 import { STAFF, Staff, MAIN_NUMBER } from "./firm";
 
@@ -112,11 +112,85 @@ function screenTools() {
  * carried by having a separate agent per person would be wasteful; instead
  * the prompt addresses them by a variable too.
  */
+/** The one name every screening agent is given, so they can be found again. */
+export const SCREENER_NAME = "Hawkins Law — call screener";
+
+/**
+ * Every screening agent in the account, newest first.
+ *
+ * They are identified by name because nothing else distinguishes them, and
+ * the id is not stored anywhere reliable — which is exactly how three of them
+ * came to exist.
+ */
+export async function findScreeners(): Promise<{ agentId: string; isTransferAgent: boolean }[]> {
+  const retell = getRetell();
+  const rows = unwrapList<Record<string, unknown>>(await retell.agent.list({ limit: 200 }));
+
+  const seen = new Set<string>();
+  const found: { agentId: string; isTransferAgent: boolean; at: number }[] = [];
+
+  for (const a of rows) {
+    if (String(a.agent_name ?? "") !== SCREENER_NAME) continue;
+    const id = String(a.agent_id ?? "");
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    found.push({
+      agentId: id,
+      isTransferAgent: a.is_transfer_agent === true,
+      at:
+        typeof a.last_modification_timestamp === "number" ? a.last_modification_timestamp : 0,
+    });
+  }
+
+  return found.sort((a, b) => b.at - a.at).map(({ agentId, isTransferAgent }) => ({
+    agentId,
+    isTransferAgent,
+  }));
+}
+
+/**
+ * Delete every screening agent except the one in use.
+ *
+ * Provisioning used to create a fresh screener on every run, so the account
+ * accumulates one per rebuild. They are invisible on a call but they clutter
+ * the agent list and make it impossible to tell which one a transfer is
+ * actually using.
+ */
+export async function pruneScreeners(keepId: string): Promise<string[]> {
+  if (!keepId) return [];
+
+  const retell = getRetell();
+  const removed: string[] = [];
+
+  for (const s of await findScreeners()) {
+    if (s.agentId === keepId) continue;
+    try {
+      await retell.agent.delete(s.agentId);
+      removed.push(s.agentId);
+    } catch (err) {
+      // A screener still referenced by another agent's transfer tool cannot
+      // be deleted. Leaving it is harmless; failing the whole provision over
+      // tidying up would not be.
+      console.warn(`[hawkins] could not delete old screening agent ${s.agentId}:`, err);
+    }
+  }
+
+  return removed;
+}
+
 export async function upsertScreener(
   existingId: string,
   voiceId: string
 ): Promise<string> {
   const retell = getRetell();
+
+  // Fall back to finding one by name. Without this, a provision run that
+  // isn't handed the id builds a brand-new screener every single time.
+  if (!existingId) {
+    const candidates = await findScreeners().catch(() => []);
+    const reusable = candidates.find((c) => c.isTransferAgent);
+    if (reusable) existingId = reusable.agentId;
+  }
 
   // One screener, addressed to whoever is being rung via {{staff_first_name}}.
   const prompt = whisperPrompt({
@@ -152,7 +226,7 @@ export async function upsertScreener(
           general_tools: screenTools() as never,
         });
         await retell.agent.update(existingId, {
-          agent_name: "Hawkins Law — call screener",
+          agent_name: SCREENER_NAME,
           voice_id: voiceId,
           language: "en-GB" as never,
         } as never);
@@ -180,7 +254,7 @@ export async function upsertScreener(
     } as never);
 
     const agent = await retell.agent.create({
-      agent_name: "Hawkins Law — call screener",
+      agent_name: SCREENER_NAME,
       voice_id: voiceId,
       language: "en-GB" as never,
       response_engine: { type: "retell-llm", llm_id: llm.llm_id },

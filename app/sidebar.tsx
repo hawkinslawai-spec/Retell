@@ -23,6 +23,7 @@ const GROUPS: { heading: string; items: { href: string; label: string }[] }[] = 
     items: [
       { href: "/agents", label: "Phone agents" },
       { href: "/campaigns", label: "Outbound calling" },
+      { href: "/hours", label: "Opening hours" },
       { href: "/phone-numbers", label: "Phone numbers" },
       { href: "/setup", label: "Setup checks" },
     ],

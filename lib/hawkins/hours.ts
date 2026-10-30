@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import { getSchedule, toMinutes, type Schedule } from "./schedule";
 
 /**
  * Opening hours, bank holidays and the spoken date phrases (Section 4).
@@ -153,13 +154,25 @@ function isWeekend(d: DateTime): boolean {
   return d.weekday === 6 || d.weekday === 7;
 }
 
-/** A day the firm works: weekday, not a bank holiday, not a closure day. */
-function isWorkingDay(d: DateTime, holidays: Set<string>): boolean {
+/**
+ * A day the firm works: marked open in the schedule, not a bank holiday, not
+ * a closure day.
+ *
+ * `schedule` is passed in rather than fetched here because this is called in
+ * a loop when searching for the next working day, and the schedule must not
+ * be re-read thirty times to answer one call.
+ */
+function isWorkingDay(d: DateTime, holidays: Set<string>, schedule: Schedule): boolean {
   const iso = d.toISODate();
   if (!iso) return false;
-  if (isWeekend(d)) return false;
+
+  const day = schedule.days.find((s) => s.weekday === d.weekday);
+  if (!day || !day.isOpen) return false;
+
   if (holidays.has(iso)) return false;
   if (closureDays().includes(iso)) return false;
+  if (schedule.closures.some((c) => c.date === iso)) return false;
+
   return true;
 }
 
@@ -172,6 +185,10 @@ export type OfficeStatus = {
   /** True when the fallback list has run out and cannot be trusted. */
   holidaysExpired: boolean;
   reason: string;
+  /** Today's hours, for the diagnostics page. */
+  hoursSpoken: string;
+  /** True when the firm's own hours could not be read and defaults are in use. */
+  usingDefaultHours: boolean;
 };
 
 /** "Saturday the 24th of October, 4:47pm" */
@@ -203,30 +220,41 @@ function ordinal(n: number): string {
  */
 export async function officeStatus(at?: DateTime): Promise<OfficeStatus> {
   const now = at || nowLondon();
-  const { dates: holidays, stale } = await bankHolidays();
+
+  // Both reads are independent, so pay for the slower one rather than both.
+  const [{ dates: holidays, stale }, schedule] = await Promise.all([
+    bankHolidays(),
+    getSchedule(),
+  ]);
 
   const todayIso = now.toISODate() || "";
   const minutes = now.hour * 60 + now.minute;
 
-  const workingDay = isWorkingDay(now, holidays);
-  const withinHours = minutes >= OPEN_MINUTES && minutes < CLOSE_MINUTES;
+  const today = schedule.days.find((s) => s.weekday === now.weekday);
+  const openMinutes = (today && toMinutes(today.openTime)) ?? OPEN_MINUTES;
+  const closeMinutes = (today && toMinutes(today.closeTime)) ?? CLOSE_MINUTES;
+
+  const workingDay = isWorkingDay(now, holidays, schedule);
+  const withinHours = minutes >= openMinutes && minutes < closeMinutes;
   const officeOpen = workingDay && withinHours;
 
   let reason = "open";
   if (!workingDay) {
-    if (isWeekend(now)) reason = "weekend";
-    else if (holidays.has(todayIso)) reason = "bank holiday";
-    else reason = "firm closure day";
+    if (holidays.has(todayIso)) reason = "bank holiday";
+    else if (closureDays().includes(todayIso) || schedule.closures.some((c) => c.date === todayIso))
+      reason = "firm closure day";
+    else if (isWeekend(now)) reason = "weekend";
+    else reason = "not a working day";
   } else if (!withinHours) {
-    reason = minutes < OPEN_MINUTES ? "before opening" : "after closing";
+    reason = minutes < openMinutes ? "before opening" : "after closing";
   }
 
   // Next working day. If the office is open right now, or we are before
   // opening on a working day, "next" is still today.
   let candidate = now;
-  if (!workingDay || minutes >= CLOSE_MINUTES) {
+  if (!workingDay || minutes >= closeMinutes) {
     candidate = now.plus({ days: 1 }).startOf("day");
-    for (let i = 0; i < 30 && !isWorkingDay(candidate, holidays); i++) {
+    for (let i = 0; i < 30 && !isWorkingDay(candidate, holidays, schedule); i++) {
       candidate = candidate.plus({ days: 1 });
     }
   }
@@ -238,5 +266,48 @@ export async function officeStatus(at?: DateTime): Promise<OfficeStatus> {
     holidaysStale: stale,
     holidaysExpired: stale && todayIso > FALLBACK_HORIZON,
     reason,
+    hoursSpoken: today && today.isOpen ? `${today.openTime} to ${today.closeTime}` : "closed today",
+    usingDefaultHours: schedule.usingDefaults,
   };
+}
+
+/**
+ * May an outbound campaign dial right now?
+ *
+ * Deliberately separate from officeStatus: a firm that answers until 17:30
+ * will often not want its agent cold-calling until 17:30, and Ofcom's rules
+ * on unsolicited calls are stricter than its own opening hours.
+ */
+export async function callingAllowed(
+  at?: DateTime
+): Promise<{ allowed: boolean; reason: string; windowSpoken: string }> {
+  const now = at || nowLondon();
+  const [{ dates: holidays }, schedule] = await Promise.all([bankHolidays(), getSchedule()]);
+
+  const iso = now.toISODate() || "";
+  const day = schedule.days.find((s) => s.weekday === now.weekday);
+
+  if (!day || !day.callingEnabled) {
+    return { allowed: false, reason: "calling is switched off for this day", windowSpoken: "none" };
+  }
+  if (holidays.has(iso)) {
+    return { allowed: false, reason: "bank holiday", windowSpoken: "none" };
+  }
+  if (closureDays().includes(iso) || schedule.closures.some((c) => c.date === iso)) {
+    return { allowed: false, reason: "firm closure day", windowSpoken: "none" };
+  }
+
+  const minutes = now.hour * 60 + now.minute;
+  const start = toMinutes(day.callStart);
+  const end = toMinutes(day.callEnd);
+  const windowSpoken = `${day.callStart} to ${day.callEnd}`;
+
+  if (start === null || end === null) {
+    return { allowed: false, reason: "calling window is misconfigured", windowSpoken };
+  }
+
+  if (minutes < start) return { allowed: false, reason: "before the calling window", windowSpoken };
+  if (minutes >= end) return { allowed: false, reason: "after the calling window", windowSpoken };
+
+  return { allowed: true, reason: "within the calling window", windowSpoken };
 }
