@@ -150,6 +150,18 @@ export default function HoursClient() {
         Opening hours decide whether Amy attempts a transfer at all &mdash; outside them she takes a
         message instead. Calling hours are separate, and only limit outbound campaigns.
       </p>
+      <p
+        style={{
+          color: C.brassText,
+          marginTop: 10,
+          fontSize: 13,
+          lineHeight: 1.6,
+          maxWidth: "64ch",
+        }}
+      >
+        All times are UK time (London). Enter the firm&apos;s hours as they are in London, not
+        your local time &mdash; GMT and British Summer Time are handled automatically.
+      </p>
 
       {note ? (
         <div style={{ ...card, borderColor: bad ? C.red : C.green }}>
@@ -171,6 +183,10 @@ export default function HoursClient() {
       {meta?.status ? (
         <div style={card}>
           <div style={{ display: "flex", gap: 26, flexWrap: "wrap", fontSize: 13 }}>
+            <div>
+              <span style={lbl}>Time in London</span>
+              <span style={{ color: C.text }}>{meta.status.nowSpoken}</span>
+            </div>
             <div>
               <span style={lbl}>Right now</span>
               <span style={{ color: meta.status.officeOpen ? C.green : C.oxbloodText }}>
