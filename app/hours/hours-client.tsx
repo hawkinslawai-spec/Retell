@@ -20,7 +20,13 @@ type Payload = {
   closures: Closure[];
   usingDefaults: boolean;
   error?: string;
-  status?: { officeOpen: boolean; reason: string; nowSpoken: string; nextWorkingDaySpoken: string };
+  status?: {
+    officeOpen: boolean;
+    reason: string;
+    nowSpoken: string;
+    nextWorkingDaySpoken: string;
+    weeklyHoursSpoken?: string;
+  };
   calling?: { allowed: boolean; reason: string; windowSpoken: string };
 };
 
@@ -228,6 +234,17 @@ export default function HoursClient() {
               <span style={{ color: C.dim }}>{meta.status.nextWorkingDaySpoken}</span>
             </div>
           </div>
+          {meta.status.weeklyHoursSpoken ? (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.hairline}` }}>
+              <span style={lbl}>Amy tells callers the office is open</span>
+              <span style={{ color: C.text, fontSize: 13.5 }}>
+                &ldquo;{meta.status.weeklyHoursSpoken}&rdquo;
+              </span>
+              <span style={{ display: "block", fontSize: 11.5, color: C.faint, marginTop: 4 }}>
+                Updates when you save.
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

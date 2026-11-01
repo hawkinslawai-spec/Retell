@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWithReason } from "@/lib/retell-verify";
+import { FIRM } from "@/lib/hawkins/firm";
 import { officeStatus } from "@/lib/hawkins/hours";
 
 export const runtime = "nodejs";
@@ -72,6 +73,7 @@ export async function POST(req: NextRequest) {
       holidaysStale: true,
       holidaysExpired: true,
       reason: "status unavailable",
+      weeklyHoursSpoken: FIRM.hoursSpoken,
     };
   }
 
@@ -89,6 +91,9 @@ export async function POST(req: NextRequest) {
         office_open: status.officeOpen ? "true" : "false",
         now_spoken: status.nowSpoken,
         next_working_day_spoken: status.nextWorkingDaySpoken,
+        // The configured week, so the hours she reads out always match the
+        // hours she actually keeps.
+        opening_hours_spoken: status.weeklyHoursSpoken || FIRM.hoursSpoken,
         caller_id_number: fromNumber,
       },
       metadata: {

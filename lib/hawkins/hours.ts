@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import { getSchedule, toMinutes, type Schedule } from "./schedule";
+import { getSchedule, toMinutes, spokenWeeklyHours, type Schedule } from "./schedule";
 
 /**
  * Opening hours, bank holidays and the spoken date phrases (Section 4).
@@ -189,6 +189,8 @@ export type OfficeStatus = {
   hoursSpoken: string;
   /** True when the firm's own hours could not be read and defaults are in use. */
   usingDefaultHours: boolean;
+  /** The whole week as Amy says it, e.g. "Monday to Friday, 9:30am to 5:30pm". */
+  weeklyHoursSpoken: string;
 };
 
 /** "Saturday the 24th of October, 4:47pm" */
@@ -268,6 +270,7 @@ export async function officeStatus(at?: DateTime): Promise<OfficeStatus> {
     reason,
     hoursSpoken: today && today.isOpen ? `${today.openTime} to ${today.closeTime}` : "closed today",
     usingDefaultHours: schedule.usingDefaults,
+    weeklyHoursSpoken: spokenWeeklyHours(schedule.days),
   };
 }
 

@@ -292,3 +292,63 @@ export async function saveSchedule(
   invalidateSchedule();
   return { ok: true };
 }
+
+/** "09:30" -> "9:30am", "17:00" -> "5pm", "00:01" -> "12:01am", "12:00" -> "12pm". */
+export function spokenTime(hhmm: string): string {
+  const mins = toMinutes(hhmm);
+  if (mins === null) return hhmm;
+  const h24 = Math.floor(mins / 60);
+  const m = mins % 60;
+  const suffix = h24 < 12 ? "am" : "pm";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return m === 0 ? `${h12}${suffix}` : `${h12}:${String(m).padStart(2, "0")}${suffix}`;
+}
+
+/**
+ * The firm's week as Amy should say it: "Monday to Friday, 9:30am to 5:30pm,
+ * and Saturday, 9am to 1pm".
+ *
+ * Built from the saved schedule so that what she *says* always matches what
+ * she *does*. Before this, the open/closed decision followed the Opening
+ * hours page but the spoken hours were fixed text in the prompt — so after
+ * Saturday was opened she still told callers "Monday to Friday" and "closed
+ * weekends", which is wrong in a way a caller would notice.
+ *
+ * Consecutive days with identical hours are grouped; a lone day is named on
+ * its own; non-adjacent days with the same hours are listed separately rather
+ * than implying the days between them.
+ */
+export function spokenWeeklyHours(days: DaySchedule[]): string {
+  const open = [...days].filter((d) => d.isOpen).sort((a, b) => a.weekday - b.weekday);
+  if (open.length === 0) return "by appointment only";
+
+  type Group = { first: number; last: number; openTime: string; closeTime: string };
+  const groups: Group[] = [];
+
+  for (const d of open) {
+    const prev = groups[groups.length - 1];
+    if (
+      prev &&
+      prev.last === d.weekday - 1 &&
+      prev.openTime === d.openTime &&
+      prev.closeTime === d.closeTime
+    ) {
+      prev.last = d.weekday;
+    } else {
+      groups.push({ first: d.weekday, last: d.weekday, openTime: d.openTime, closeTime: d.closeTime });
+    }
+  }
+
+  const parts = groups.map((g) => {
+    const span =
+      g.first === g.last
+        ? DAY_NAMES[g.first]
+        : g.last === g.first + 1
+        ? `${DAY_NAMES[g.first]} and ${DAY_NAMES[g.last]}`
+        : `${DAY_NAMES[g.first]} to ${DAY_NAMES[g.last]}`;
+    return `${span}, ${spokenTime(g.openTime)} to ${spokenTime(g.closeTime)}`;
+  });
+
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join("; ")}; and ${parts[parts.length - 1]}`;
+}

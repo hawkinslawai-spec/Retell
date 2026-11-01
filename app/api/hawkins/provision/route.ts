@@ -4,7 +4,7 @@ import { getRetell } from "@/lib/retell-client";
 import { appBaseUrl } from "@/lib/retell-agents";
 import { upsertScreener, pruneScreeners, amyTools } from "@/lib/hawkins/agent";
 import { amyPrompt } from "@/lib/hawkins/prompt";
-import { STAFF } from "@/lib/hawkins/firm";
+import { STAFF, FIRM } from "@/lib/hawkins/firm";
 import { officeStatus } from "@/lib/hawkins/hours";
 
 export const runtime = "nodejs";
@@ -62,6 +62,17 @@ export async function POST(req: NextRequest) {
   const retell = getRetell();
   const warnings: string[] = [];
 
+  // Used only when the inbound webhook doesn't supply a value — most likely
+  // because the webhook has come unset on the phone number, which has already
+  // happened several times. Without these Amy would see the raw placeholder
+  // text; with them she falls back to "closed" and the standard hours.
+  const defaultVariables = {
+    office_open: "false",
+    opening_hours_spoken: FIRM.hoursSpoken,
+    next_working_day_spoken: "the next working day",
+  };
+
+
   try {
     // 1. The screening agent that does the whisper. upsertScreener finds an
     //    existing one by name when none is passed, so repeated runs reuse it
@@ -101,7 +112,8 @@ export async function POST(req: NextRequest) {
         // the guardrails must not be paraphrased into something softer.
         model_temperature: 0.3,
         general_tools: tools as never,
-      });
+        default_dynamic_variables: defaultVariables,
+      } as never);
 
       await retell.agent.update(agentId, {
         agent_name: "Amy — Hawkins Law reception",
@@ -116,7 +128,8 @@ export async function POST(req: NextRequest) {
         begin_message: null,
         model_temperature: 0.3,
         general_tools: tools as never,
-      });
+        default_dynamic_variables: defaultVariables,
+      } as never);
       llmId = llm.llm_id;
 
       const agent = await retell.agent.create({
