@@ -220,7 +220,9 @@ export async function GET(req: NextRequest) {
       status: result.ok ? "pass" : "fail",
       detail: result.ok
         ? `Signed in to SMTP as ${process.env.SMTP_USER}`
-        : result.error || "SMTP login failed",
+        : `${result.error || "SMTP login failed"} — signing in as ${
+            (process.env.SMTP_USER || "").trim() || "(SMTP_USER empty)"
+          } via ${process.env.SMTP_HOST || "smtp.gmail.com"}:${process.env.SMTP_PORT || "465"}`,
       fix: result.ok
         ? undefined
         : /office365|outlook/i.test(process.env.SMTP_HOST || "")
