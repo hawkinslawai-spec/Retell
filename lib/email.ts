@@ -55,10 +55,15 @@ function getTransport(): Transporter {
     // offers it, so this only ever bites if something is badly wrong.
     requireTLS: p !== 465,
     auth: {
-      user,
-      // Google shows app passwords as "abcd efgh ijkl mnop". The spaces are
-      // display formatting and are rejected if pasted through, so strip them.
-      pass: pass.replace(/\s+/g, ""),
+      user: user.trim(),
+      // Google shows app passwords as "abcd efgh ijkl mnop"; those spaces are
+      // display formatting and Google rejects them, so strip them — but ONLY
+      // for Gmail. A Microsoft 365 password can legitimately contain spaces,
+      // and stripping them sends a different password: Office 365 answers
+      // "535 5.7.3 Authentication unsuccessful" with no hint as to why.
+      // Elsewhere, trim only the accidental whitespace at either end that
+      // pasting into Vercel tends to add.
+      pass: /gmail\.com$/i.test(host()) ? pass.replace(/\s+/g, "") : pass.trim(),
     },
   });
 

@@ -226,6 +226,8 @@ export async function GET(req: NextRequest) {
         : /office365|outlook/i.test(process.env.SMTP_HOST || "")
         ? /disabled for the tenant/i.test(result.error || "")
           ? "SMTP sending is switched off for the firm's whole Microsoft 365 organisation — Microsoft's secure default, and not a password problem. The firm's IT admin must turn it on: Exchange admin centre → Settings → Mail flow → untick 'Turn off SMTP AUTH protocol for your organization' (or PowerShell: Set-TransportConfig -SmtpClientAuthenticationDisabled $false), then also enable Authenticated SMTP on the reception@ mailbox. Microsoft retires password-based SMTP at the end of December 2026, so sending through Microsoft Graph is the longer-term fix."
+          : /5\.7\.3\b/.test(result.error || "")
+          ? "SMTP is allowed, but Microsoft rejected the sign-in for SMTP_USER. Either SMTP_PASSWORD doesn't match the reception@ account (re-enter it in Vercel, then redeploy), or the account has MFA / Security Defaults, which block password sign-in over SMTP — in which case send through Microsoft Graph instead of weakening the account's security."
           : /535|5\.7\.139|5\.7\.3|authentication unsuccessful|basic authentication is disabled/i.test(
             result.error || ""
           )
