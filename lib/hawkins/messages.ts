@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
-import nodemailer, { Transporter } from "nodemailer";
+import { sendMail } from "../mailer";
 import { getSupabase, isSupabaseConfigured } from "../supabase";
-import { GENERAL_EMAIL, SENDING_MAILBOX } from "./firm";
+import { GENERAL_EMAIL } from "./firm";
 
 /**
  * Call messages and their emails (Section 8).
@@ -31,20 +31,6 @@ export type CallMessage = {
   callId: string;
   recordingUrl: string;
 };
-
-function transport(): Transporter {
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASSWORD;
-  if (!user || !pass) throw new Error("SMTP_USER / SMTP_PASSWORD not set");
-
-  const port = Number(process.env.SMTP_PORT) || 465;
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port,
-    secure: port === 465,
-    auth: { user, pass: pass.replace(/\s+/g, "") },
-  });
-}
 
 function stamp(): { date: string; time: string; iso: string } {
   const now = DateTime.now().setZone("Europe/London");
@@ -149,10 +135,10 @@ export async function sendCallMessage(m: CallMessage): Promise<{ sent: boolean; 
   // retry, and rare enough that more would just delay the alert.
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      await transport().sendMail({
-        from: `"Hawkins Law reception" <${process.env.SMTP_USER || SENDING_MAILBOX}>`,
-        to: to.join(", "),
-        cc: cc.length > 0 ? cc.join(", ") : undefined,
+      await sendMail({
+        fromName: "Hawkins Law reception",
+        to,
+        cc,
         subject,
         text,
       });
@@ -169,9 +155,9 @@ export async function sendCallMessage(m: CallMessage): Promise<{ sent: boolean; 
   // the body, so it is recoverable from an inbox even if nobody opens the
   // console.
   try {
-    await transport().sendMail({
-      from: `"Hawkins Law reception" <${process.env.SMTP_USER || SENDING_MAILBOX}>`,
-      to: GENERAL_EMAIL,
+    await sendMail({
+      fromName: "Hawkins Law reception",
+      to: [GENERAL_EMAIL],
       subject: `[DELIVERY FAILED] ${subject}`,
       text:
         `This message could not be delivered to ${to.join(", ")}.\n` +
@@ -218,9 +204,9 @@ export async function recordAccountReadout(input: {
   }
 
   try {
-    await transport().sendMail({
-      from: `"Hawkins Law reception" <${process.env.SMTP_USER || SENDING_MAILBOX}>`,
-      to,
+    await sendMail({
+      fromName: "Hawkins Law reception",
+      to: [to],
       subject: `Client account details read to ${input.callerName || "a caller"} (${date} ${time})`,
       text: [
         "RECORD OF CLIENT ACCOUNT READ-OUT",

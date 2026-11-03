@@ -1,4 +1,4 @@
-import nodemailer, { Transporter } from "nodemailer";
+import { isMailConfigured, sendMail, verifyMail } from "./mailer";
 import { BRAND_NAME } from "./config";
 
 /**
@@ -18,69 +18,18 @@ import { BRAND_NAME } from "./config";
  * any other provider and the rest of this file is unchanged.
  */
 
-let cached: Transporter | null = null;
-
-function host(): string {
-  return process.env.SMTP_HOST || "smtp.gmail.com";
-}
-
-function port(): number {
-  const parsed = Number(process.env.SMTP_PORT);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 465;
-}
-
+/**
+ * Sending lives in ./mailer — Microsoft Graph with OAuth when configured,
+ * SMTP otherwise. These wrappers keep the names the rest of the app uses.
+ */
 export function isEmailConfigured(): boolean {
-  return Boolean(process.env.SMTP_USER && process.env.SMTP_PASSWORD);
-}
-
-function getTransport(): Transporter {
-  if (cached) return cached;
-
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASSWORD;
-  if (!user || !pass) {
-    throw new Error("Missing SMTP_USER or SMTP_PASSWORD environment variable");
-  }
-
-  const p = port();
-  cached = nodemailer.createTransport({
-    host: host(),
-    port: p,
-    // 465 is implicit TLS; 587 upgrades with STARTTLS. Getting this backwards
-    // produces a connection that hangs rather than a clear error.
-    secure: p === 465,
-    // On 587 (and 25) refuse to continue unless the server upgrades to TLS.
-    // Without this, nodemailer will happily send the mailbox password in
-    // plain text to a server that doesn't offer STARTTLS. Office 365 always
-    // offers it, so this only ever bites if something is badly wrong.
-    requireTLS: p !== 465,
-    auth: {
-      user: user.trim(),
-      // Google shows app passwords as "abcd efgh ijkl mnop"; those spaces are
-      // display formatting and Google rejects them, so strip them — but ONLY
-      // for Gmail. A Microsoft 365 password can legitimately contain spaces,
-      // and stripping them sends a different password: Office 365 answers
-      // "535 5.7.3 Authentication unsuccessful" with no hint as to why.
-      // Elsewhere, trim only the accidental whitespace at either end that
-      // pasting into Vercel tends to add.
-      pass: /gmail\.com$/i.test(host()) ? pass.replace(/\s+/g, "") : pass.trim(),
-    },
-  });
-
-  return cached;
+  return isMailConfigured();
 }
 
 /** Verify credentials without sending anything. Used by /setup diagnostics. */
-export async function verifyEmail(): Promise<{ ok: boolean; error?: string }> {
-  if (!isEmailConfigured()) {
-    return { ok: false, error: "SMTP_USER / SMTP_PASSWORD not set" };
-  }
-  try {
-    await getTransport().verify();
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
+export async function verifyEmail(): Promise<{ ok: boolean; error?: string; detail?: string; method?: string }> {
+  const r = await verifyMail();
+  return { ok: r.ok, error: r.ok ? undefined : r.detail, detail: r.detail, method: r.method };
 }
 
 function escapeHtml(value: string): string {
@@ -199,10 +148,10 @@ export async function sendCallSummaryEmail(input: CallSummaryEmail): Promise<boo
   ];
 
   try {
-    await getTransport().sendMail({
-      from: `"${BRAND_NAME}" <${process.env.SMTP_USER}>`,
-      // Comma-separated lists work, so one agent can notify several people.
-      to: input.to,
+    await sendMail({
+      fromName: BRAND_NAME,
+      // One agent can notify several people, comma-separated.
+      to: String(input.to || "").split(",").map((a) => a.trim()).filter(Boolean),
       subject,
       text: textParts.filter(Boolean).join("\n"),
       html,

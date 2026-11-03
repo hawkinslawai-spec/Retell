@@ -209,35 +209,37 @@ export async function GET(req: NextRequest) {
       id: "email",
       label: "Call summary email",
       status: "fail",
-      detail: "SMTP_USER / SMTP_PASSWORD not set",
-      fix: "This client's summaries go by email, so this is required. Gmail: turn on 2-Step Verification, create an App Password, then use the Gmail address as SMTP_USER and the 16-character password as SMTP_PASSWORD.",
+      detail: "No email method is configured",
+      fix: "Microsoft 365: set MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET and SMTP_USER (the sending mailbox) for Microsoft Graph. Gmail: set SMTP_USER and a 16-character App Password as SMTP_PASSWORD.",
     });
   } else {
     const result = await verifyEmail();
+    const err = result.error || "";
+    const graph = result.method === "graph";
+
+    let fix: string | undefined;
+    if (!result.ok) {
+      if (graph) {
+        fix = /Mail\.Send not granted|no Mail\.Send/i.test(err)
+          ? "The app registration exists but can't send yet. In Entra: App registrations → the app → API permissions → Add a permission → Microsoft Graph → Application permissions → Mail.Send → Add, then click 'Grant admin consent'. It can take a few minutes to apply."
+          : "Check the three values in Vercel against the app registration's Overview page: Directory (tenant) ID → MS_TENANT_ID, Application (client) ID → MS_CLIENT_ID, and the client secret's Value (not its Secret ID) → MS_CLIENT_SECRET. Redeploy after changing them.";
+      } else if (/office365|outlook/i.test(process.env.SMTP_HOST || "")) {
+        fix = /disabled for the tenant/i.test(err)
+          ? "SMTP is switched off for the firm's Microsoft 365 organisation. Rather than turn it on, use Microsoft Graph: set MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET from an app registration with the Mail.Send permission."
+          : "Microsoft rejected the SMTP sign-in — a wrong password, or MFA / Security Defaults on the account. Microsoft Graph avoids passwords entirely: set MS_TENANT_ID, MS_CLIENT_ID and MS_CLIENT_SECRET from an app registration with Mail.Send.";
+      } else if (/invalid login|username and password not accepted|535|534/i.test(err)) {
+        fix = "Gmail rejected the login. It needs an App Password, not the account password — and App Passwords only appear once 2-Step Verification is on.";
+      } else {
+        fix = "Check SMTP_HOST and SMTP_PORT. Port 465 needs implicit TLS, 587 needs STARTTLS; the defaults (smtp.gmail.com / 465) are right for Gmail.";
+      }
+    }
+
     checks.push({
       id: "email",
       label: "Call summary email",
       status: result.ok ? "pass" : "fail",
-      detail: result.ok
-        ? `Signed in to SMTP as ${process.env.SMTP_USER}`
-        : `${result.error || "SMTP login failed"} — signing in as ${
-            (process.env.SMTP_USER || "").trim() || "(SMTP_USER empty)"
-          } via ${process.env.SMTP_HOST || "smtp.gmail.com"}:${process.env.SMTP_PORT || "465"}`,
-      fix: result.ok
-        ? undefined
-        : /office365|outlook/i.test(process.env.SMTP_HOST || "")
-        ? /disabled for the tenant/i.test(result.error || "")
-          ? "SMTP sending is switched off for the firm's whole Microsoft 365 organisation — Microsoft's secure default, and not a password problem. The firm's IT admin must turn it on: Exchange admin centre → Settings → Mail flow → untick 'Turn off SMTP AUTH protocol for your organization' (or PowerShell: Set-TransportConfig -SmtpClientAuthenticationDisabled $false), then also enable Authenticated SMTP on the reception@ mailbox. Microsoft retires password-based SMTP at the end of December 2026, so sending through Microsoft Graph is the longer-term fix."
-          : /5\.7\.3\b/.test(result.error || "")
-          ? "SMTP is allowed, but Microsoft rejected the sign-in for SMTP_USER. Either SMTP_PASSWORD doesn't match the reception@ account (re-enter it in Vercel, then redeploy), or the account has MFA / Security Defaults, which block password sign-in over SMTP — in which case send through Microsoft Graph instead of weakening the account's security."
-          : /535|5\.7\.139|5\.7\.3|authentication unsuccessful|basic authentication is disabled/i.test(
-            result.error || ""
-          )
-          ? "Microsoft rejected the login. Usually one of: SMTP AUTH is switched off for this mailbox (Microsoft 365 admin centre → Users → reception@ → Mail → Manage email apps → tick Authenticated SMTP); Security Defaults or MFA is blocking password logins for SMTP; or the password is wrong. Microsoft is retiring password-based SMTP at the end of December 2026."
-          : "Check SMTP_HOST is smtp.office365.com and SMTP_PORT is 587. Port 25 is blocked by most cloud hosts."
-        : /invalid login|username and password not accepted|535|534/i.test(result.error || "")
-        ? "Gmail rejected the login. It needs an App Password, not the account password — and App Passwords only appear once 2-Step Verification is on."
-        : "Check SMTP_HOST and SMTP_PORT. Port 465 needs implicit TLS, 587 needs STARTTLS; the defaults (smtp.gmail.com / 465) are right for Gmail.",
+      detail: result.detail || err || "Email check failed",
+      fix,
     });
   }
 
