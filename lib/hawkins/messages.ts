@@ -2,6 +2,7 @@ import { DateTime } from "luxon";
 import { sendMail } from "../mailer";
 import { getSupabase, isSupabaseConfigured } from "../supabase";
 import { GENERAL_EMAIL } from "./firm";
+import { getAmySettings } from "./settings";
 
 /**
  * Call messages and their emails (Section 8).
@@ -155,9 +156,10 @@ export async function sendCallMessage(m: CallMessage): Promise<{ sent: boolean; 
   // the body, so it is recoverable from an inbox even if nobody opens the
   // console.
   try {
+    const { generalEmail } = await getAmySettings();
     await sendMail({
       fromName: "Hawkins Law reception",
-      to: [GENERAL_EMAIL],
+      to: [generalEmail || GENERAL_EMAIL],
       subject: `[DELIVERY FAILED] ${subject}`,
       text:
         `This message could not be delivered to ${to.join(", ")}.\n` +

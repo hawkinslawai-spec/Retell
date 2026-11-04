@@ -8,7 +8,7 @@ import { appBaseUrl } from "@/lib/retell-agents";
 import { TIMEZONE, BRAND_NAME } from "@/lib/config";
 import { officeStatus } from "@/lib/hawkins/hours";
 import { amyAgentIds } from "@/lib/hawkins/agent";
-import { STAFF } from "@/lib/hawkins/firm";
+import { getAmySettings } from "@/lib/hawkins/settings";
 import { getRetell } from "@/lib/retell-client";
 
 
@@ -272,7 +272,7 @@ export async function GET(req: NextRequest) {
       );
       const expected = [
         "note_caller_details",
-        ...STAFF.map((st) => `transfer_to_${st.id}`),
+        ...(await getAmySettings()).staff.map((st) => `transfer_to_${st.id}`),
         "send_message",
         "get_client_account_details",
         "end_call",
@@ -291,7 +291,7 @@ export async function GET(req: NextRequest) {
         fix:
           missing.length === 0
             ? undefined
-            : "Amy's tools have been overwritten — most likely by pressing Save on her in the Phone agents page. Rebuild her with POST /api/hawkins/provision, then press Publish in Retell. Until then she cannot transfer calls or send messages.",
+            : "Amy's tools have been overwritten — most likely by pressing Save on her in the Phone agents page. Open the Amy settings page and press Save & publish to rebuild her. Until then she cannot transfer calls or send messages.",
       });
     }
   } catch (err) {

@@ -7,7 +7,7 @@ import { appBaseUrl } from "@/lib/retell-agents";
 import { getRetell } from "@/lib/retell-client";
 import { isSmsConfigured } from "@/lib/sms";
 import { isEmailConfigured } from "@/lib/email";
-import { STAFF, GENERAL_EMAIL } from "@/lib/hawkins/firm";
+import { getAmySettings } from "@/lib/hawkins/settings";
 import { amyAgentIds } from "@/lib/hawkins/agent";
 import { createAppointment, cancelAppointment, getBusyIntervals } from "@/lib/appointments";
 import { businessWindow, generateOpenSlots, now as businessNow } from "@/lib/slots";
@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
    * that cries wolf on the production agent is worse than no diagnostic.
    */
   const isAmy = (await amyAgentIds()).includes(agentId);
+  const amy = await getAmySettings();
 
   // ------------------------------------------------------- what's configured
   checks.push({
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
     label: "Resolved settings",
     status: "pass",
     detail: isAmy
-      ? `Amy — configured in code (lib/hawkins). Staff: ${STAFF.length}. Timezone: Europe/London.`
+      ? `Amy — configured on the Amy settings page. Staff: ${amy.staff.length}. Timezone: Europe/London.`
       : [
           `timezone: ${settings.timezone}`,
           `transfer: ${settings.transferMode}${settings.transferNumber ? ` → ${settings.transferNumber}` : " (no number)"}`,
@@ -219,7 +220,7 @@ export async function GET(req: NextRequest) {
 
       const expected = [
         "note_caller_details",
-        ...STAFF.map((st) => `transfer_to_${st.id}`),
+        ...amy.staff.map((st) => `transfer_to_${st.id}`),
         "send_message",
         "get_client_account_details",
         "end_call",
@@ -326,7 +327,7 @@ export async function GET(req: NextRequest) {
         ? "SMTP is not configured — every message Amy takes would fail to reach anyone"
         : "SMTP is not configured — no summaries will be sent"
       : isAmy
-      ? `Messages route to the staff in lib/hawkins/firm.ts, cc ${GENERAL_EMAIL}`
+      ? `Messages route to the staff on the Amy settings page, cc ${amy.generalEmail}`
       : settings.summaryEmail
       ? `${settings.summaryEmail} · ${settings.emailEveryCall ? "every call" : settings.emailOnTransfer ? "transfers only" : "nothing selected"}`
       : "No recipient set for this agent",

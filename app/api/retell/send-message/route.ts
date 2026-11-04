@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { verifyWithReason, parseRetellBody, str } from "@/lib/retell-verify";
 import { sendCallMessage, CallMessage } from "@/lib/hawkins/messages";
-import { resolveStaff, routeFor, Route, GENERAL_EMAIL } from "@/lib/hawkins/firm";
+import { resolveStaff, routeFor, Route } from "@/lib/hawkins/firm";
+import { getAmySettings } from "@/lib/hawkins/settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,8 +50,10 @@ export async function POST(req: NextRequest) {
     ? (rawRoute as Route)
     : "unknown_handler";
 
-  const handler = resolveStaff(str(args.file_handler));
-  const { to, cc } = routeFor(route, handler);
+  // Recipients follow the staff and routing saved on the Amy settings page.
+  const settings = await getAmySettings();
+  const handler = resolveStaff(str(args.file_handler), settings.staff);
+  const { to, cc } = routeFor(route, handler, settings);
 
   const callerName = str(args.caller_name);
   const phone =
@@ -85,7 +88,7 @@ export async function POST(req: NextRequest) {
     // an explicit no counts, because a missed exchange deadline costs more
     // than an unnecessary URGENT.
     urgent: /^(true|yes|urgent)$/i.test(str(args.urgent)),
-    to: to.length > 0 ? to : [GENERAL_EMAIL],
+    to: to.length > 0 ? to : [settings.generalEmail],
     cc,
     callId: str(call.call_id),
     recordingUrl: str(call.recording_url),

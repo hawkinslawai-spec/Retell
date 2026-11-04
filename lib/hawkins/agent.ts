@@ -1,6 +1,6 @@
 import { getRetell, unwrapList } from "../retell-client";
 import { appBaseUrl } from "../retell-agents";
-import { STAFF, Staff, MAIN_NUMBER } from "./firm";
+import { DEFAULT_STAFF, Staff, MAIN_NUMBER } from "./firm";
 
 /**
  * Amy's Retell wiring (Sections 7 and 13).
@@ -202,7 +202,9 @@ export async function pruneScreeners(keepId: string): Promise<string[]> {
 
 export async function upsertScreener(
   existingId: string,
-  voiceId: string
+  voiceId: string,
+  /** The draft to write, from rebuild's writableVersion. Omitted = latest. */
+  draft?: { version?: number; llmVersion?: number }
 ): Promise<string> {
   const retell = getRetell();
 
@@ -221,10 +223,10 @@ export async function upsertScreener(
 
   try {
     if (existingId) {
-      const existing = (await retell.agent.retrieve(existingId)) as unknown as Record<
-        string,
-        unknown
-      >;
+      const existing = (await retell.agent.retrieve(
+        existingId,
+        draft?.version !== undefined ? { version: draft.version } : undefined
+      )) as unknown as Record<string, unknown>;
       const engine = (existing.response_engine || {}) as Record<string, unknown>;
       const llmId = String(engine.llm_id ?? "");
 
@@ -246,11 +248,13 @@ export async function upsertScreener(
           begin_message: null,
           model_temperature: 0.2,
           general_tools: screenTools() as never,
-        });
+          version: draft?.llmVersion,
+        } as never);
         await retell.agent.update(existingId, {
           agent_name: SCREENER_NAME,
           voice_id: voiceId,
           language: "en-GB" as never,
+          version: draft?.version,
         } as never);
         return existingId;
       }
@@ -296,11 +300,16 @@ export async function upsertScreener(
  * Six transfer tools, the message tool, the client account tool, a variable
  * extractor that feeds the whisper, and end_call for abusive callers.
  */
-export function amyTools(screenAgentId: string) {
+export function amyTools(
+  screenAgentId: string,
+  staffList: Staff[] = DEFAULT_STAFF,
+  /** The published screener version to use. */
+  screenerVersion = 0
+) {
   const base = appBaseUrl();
   if (!base) return null;
 
-  const transfers = STAFF.map((staff) => ({
+  const transfers = staffList.map((staff) => ({
     type: "transfer_call" as const,
     name: `transfer_to_${staff.id}`,
     description:
@@ -315,7 +324,7 @@ export function amyTools(screenAgentId: string) {
       ? {
           type: "agentic_warm_transfer" as const,
           agentic_transfer_config: {
-            transfer_agent: { agent_id: screenAgentId, agent_version: 0 },
+            transfer_agent: { agent_id: screenAgentId, agent_version: screenerVersion },
             transfer_timeout_ms: DECIDE_MS,
             // Never bridge on a timeout. Section 7 requires a keypress
             // precisely so that an unanswered phone or a voicemail greeting
@@ -537,8 +546,8 @@ export async function isAmyAgent(agentId: string): Promise<boolean> {
 export const AMY_IS_CODE_MANAGED =
   "Amy is configured in code, not on this page. Saving her here would replace her transfer, " +
   "message and account tools with the generic template's and break transfers and emails. " +
-  "To change her prompt, staff, routing or hours, edit lib/hawkins or the Opening hours page, " +
-  "then rebuild her with POST /api/hawkins/provision and press Publish in Retell.";
+  "To change her staff, routing, voice or wording, use the Amy settings page; for hours, the " +
+  "Opening hours page. Saving there rebuilds and publishes her automatically.";
 
 /** Is this the screening agent Amy's transfers depend on? */
 export async function isAmyScreener(agentId: string): Promise<boolean> {

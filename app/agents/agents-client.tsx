@@ -1085,10 +1085,10 @@ export default function AgentsClient() {
                 }}
               >
                 <strong style={{ color: C.brassText }}>Amy can&apos;t be saved from this page.</strong>{" "}
-                Her transfers, messages and account details are built from code, and saving here
-                would replace them with this page&apos;s generic tools. Change her hours on the
-                Opening hours page; anything else needs a rebuild from the code and a Publish in
-                Retell.
+                Saving here would replace her transfers, messages and account details with this
+                page&apos;s generic tools. Edit her staff, routing, voice and wording on the{" "}
+                <a href="/amy" style={{ color: C.brassText }}>Amy page</a>, and her hours on the
+                Opening hours page &mdash; both publish her automatically.
               </div>
             ) : null}
             <button

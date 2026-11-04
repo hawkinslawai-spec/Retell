@@ -21,6 +21,7 @@ const GROUPS: { heading: string; items: { href: string; label: string }[] }[] = 
   {
     heading: "Configuration",
     items: [
+      { href: "/amy", label: "Amy" },
       { href: "/agents", label: "Phone agents" },
       { href: "/campaigns", label: "Outbound calling" },
       { href: "/hours", label: "Opening hours" },

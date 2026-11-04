@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { verifyWithReason, parseRetellBody, str } from "@/lib/retell-verify";
-import { CLIENT_ACCOUNT_SCRIPT, resolveStaff, GENERAL_EMAIL } from "@/lib/hawkins/firm";
+import { CLIENT_ACCOUNT_SCRIPT, resolveStaff } from "@/lib/hawkins/firm";
+import { getAmySettings } from "@/lib/hawkins/settings";
 import { recordAccountReadout } from "@/lib/hawkins/messages";
 
 export const runtime = "nodejs";
@@ -34,7 +35,8 @@ export async function POST(req: NextRequest) {
 
   const { args, call } = parseRetellBody(rawBody);
 
-  const handler = resolveStaff(str(args.file_handler));
+  const settings = await getAmySettings();
+  const handler = resolveStaff(str(args.file_handler), settings.staff);
   const callerName = str(args.caller_name);
   const phone = str(args.phone) || str(call.from_number);
   const matterLabel = str(args.matter_label);
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest) {
       phone,
       matterLabel,
       fileHandler: handler ? handler.fullName : "",
-      handlerEmail: handler ? handler.email : GENERAL_EMAIL,
+      handlerEmail: handler ? handler.email : settings.generalEmail,
       callId: str(call.call_id),
     });
   });

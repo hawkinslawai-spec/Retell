@@ -15,14 +15,11 @@
  *    rewrite that risks disturbing the guardrails.
  */
 
-export type StaffId =
-  | "mohshin"
-  | "aqilah"
-  | "aqeel"
-  | "rafka"
-  | "muhammed"
-  | "subrata"
-  | "bilkis";
+/**
+ * A short lowercase id. It becomes the transfer tool's name
+ * (transfer_to_<id>), so it must stay stable once a person is set up.
+ */
+export type StaffId = string;
 
 export type Staff = {
   id: StaffId;
@@ -39,7 +36,12 @@ export type Staff = {
   variants: string[];
 };
 
-export const STAFF: Staff[] = [
+/**
+ * The staff list Amy shipped with. The live list is edited on the Amy
+ * settings page and read through ./settings; this is the fallback when the
+ * database has nothing saved or can't be reached.
+ */
+export const DEFAULT_STAFF: Staff[] = [
   {
     id: "mohshin",
     firstName: "Mohshin",
@@ -101,8 +103,17 @@ export const STAFF: Staff[] = [
   },
 ];
 
-export function staffById(id: string): Staff | undefined {
-  return STAFF.find((s) => s.id === id.toLowerCase().trim());
+/** Surnames shared by more than one person — a bare "Patel" must never be guessed. */
+export function sharedSurnames(staff: Staff[]): Map<string, Staff[]> {
+  const bySurname = new Map<string, Staff[]>();
+  for (const s of staff) {
+    const parts = s.fullName.trim().split(/\s+/);
+    if (parts.length < 2) continue;
+    const surname = parts[parts.length - 1].toLowerCase();
+    bySurname.set(surname, [...(bySurname.get(surname) || []), s]);
+  }
+  for (const [k, v] of bySurname) if (v.length < 2) bySurname.delete(k);
+  return bySurname;
 }
 
 /**
@@ -113,11 +124,11 @@ export function staffById(id: string): Staff | undefined {
  * then routed as "asked for someone not on the list", which is what the
  * routing table says to do.
  */
-export function resolveStaff(input: string): Staff | undefined {
-  const needle = (input || "").toLowerCase().trim();
+export function resolveStaff(input: string, staff: Staff[] = DEFAULT_STAFF): Staff | undefined {
+  const needle = (input || "").toLowerCase().replace(/\./g, "").replace(/\s+/g, " ").trim();
   if (!needle) return undefined;
 
-  const exact = STAFF.find(
+  const exact = staff.find(
     (s) =>
       s.id === needle ||
       s.firstName.toLowerCase() === needle ||
@@ -125,13 +136,14 @@ export function resolveStaff(input: string): Staff | undefined {
   );
   if (exact) return exact;
 
-  // "Mr Patel" and "Mrs Patel" are listed as variants of a specific person,
-  // but the spec is explicit that a bare "Patel" must never be guessed — the
-  // agent has to ask which one. Returning undefined here keeps that true even
+  // "Mr Patel" and "Mrs Patel" may be listed as variants of a specific
+  // person, but a bare surname shared by two people must never be guessed —
+  // the agent has to ask which one. Returning undefined keeps that true even
   // if the model skips the question.
-  if (needle === "patel" || needle === "mr. patel") return undefined;
+  const shared = sharedSurnames(staff);
+  if (shared.has(needle)) return undefined;
 
-  return STAFF.find((s) => s.variants.includes(needle));
+  return staff.find((s) => s.variants.map((v) => v.toLowerCase()).includes(needle));
 }
 
 /** How a call is categorised, which decides the transfer order and recipients. */
@@ -143,11 +155,34 @@ export type Route =
   | "complaint"
   | "sales";
 
+/** The routes whose ring order is configurable. */
+export type RoutingTable = {
+  new_enquiry: StaffId[];
+  /** Also used for callers asking for someone not on the list. */
+  unknown_handler: StaffId[];
+  third_party: StaffId[];
+  /** Also the escalation for bank-detail concerns. */
+  complaint: StaffId[];
+};
+
+export const DEFAULT_ROUTES: RoutingTable = {
+  new_enquiry: ["mohshin", "aqilah"],
+  unknown_handler: ["aqeel", "mohshin"],
+  third_party: ["aqeel", "mohshin"],
+  complaint: ["mohshin"],
+};
+
 export const GENERAL_EMAIL = "info@hawkinslaw.co.uk";
 export const SENDING_MAILBOX = "reception@hawkinslaw.co.uk";
 
 /** Caller ID presented on the staff leg so staff recognise a transfer. */
 export const MAIN_NUMBER = "+442071777579";
+
+export type RoutingConfig = {
+  staff: Staff[];
+  routes: RoutingTable;
+  generalEmail: string;
+};
 
 /**
  * Who to ring, in order, and who to email if nobody accepts (Section 5).
@@ -157,11 +192,16 @@ export const MAIN_NUMBER = "+442071777579";
  */
 export function routeFor(
   route: Route,
-  handler?: Staff
+  handler: Staff | undefined,
+  cfg: RoutingConfig = { staff: DEFAULT_STAFF, routes: DEFAULT_ROUTES, generalEmail: GENERAL_EMAIL }
 ): { order: Staff[]; to: string[]; cc: string[] } {
-  const mohshin = staffById("mohshin")!;
-  const aqilah = staffById("aqilah")!;
-  const aqeel = staffById("aqeel")!;
+  const pick = (ids: StaffId[]) =>
+    ids.map((id) => cfg.staff.find((s) => s.id === id)).filter((s): s is Staff => Boolean(s));
+
+  const ordered = (ids: StaffId[]) => {
+    const order = pick(ids);
+    return { order, to: order.map((s) => s.email), cc: [cfg.generalEmail] };
+  };
 
   switch (route) {
     case "named_handler":
@@ -169,25 +209,19 @@ export function routeFor(
       // not shop the caller around to a colleague they didn't ask for.
       return handler
         ? { order: [handler], to: [handler.email], cc: [] }
-        : { order: [aqeel, mohshin], to: [aqeel.email, mohshin.email], cc: [GENERAL_EMAIL] };
+        : ordered(cfg.routes.unknown_handler);
 
     case "new_enquiry":
-      return {
-        order: [mohshin, aqilah],
-        to: [mohshin.email, aqilah.email],
-        cc: [GENERAL_EMAIL],
-      };
+      return ordered(cfg.routes.new_enquiry);
 
     case "unknown_handler":
+      return ordered(cfg.routes.unknown_handler);
+
     case "third_party":
-      return {
-        order: [aqeel, mohshin],
-        to: [aqeel.email, mohshin.email],
-        cc: [GENERAL_EMAIL],
-      };
+      return ordered(cfg.routes.third_party);
 
     case "complaint":
-      return { order: [mohshin], to: [mohshin.email], cc: [GENERAL_EMAIL] };
+      return ordered(cfg.routes.complaint);
 
     case "sales":
       // No transfer and nothing sent. The agent asks them to email info@.
@@ -199,6 +233,16 @@ export function routeFor(
 //  Firm facts (Section 2). These are the ONLY facts about the firm the agent
 //  may state. Anything else is answered with an offer of a call back.
 // ---------------------------------------------------------------------------
+
+/** The firm facts Amy may state. Editable on the Amy settings page; these are the defaults. */
+export type FirmFacts = {
+  name: string;
+  address: string;
+  websiteSpoken: string;
+  emailSpoken: string;
+  practiceAreasSpoken: string;
+  descriptionSpoken: string;
+};
 
 export const FIRM = {
   name: "Hawkins Law",
