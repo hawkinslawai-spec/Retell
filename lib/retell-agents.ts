@@ -1,7 +1,7 @@
 import { getRetell, unwrapList } from "./retell-client";
 import { CustomLog } from "./custom-logs";
 import { getAgentSettings, saveAgentSettings } from "./agent-settings";
-import { isAmyAgent, AMY_IS_CODE_MANAGED } from "./hawkins/agent";
+import { isAmyAgent, isAmyScreener, AMY_IS_CODE_MANAGED, AMY_NOT_DELETABLE } from "./hawkins/agent";
 import { upsertScreenAgent, defaultScreenPrompt } from "./screening";
 import { BUSINESS_NAME } from "./config";
 
@@ -598,5 +598,8 @@ export async function updateAgent(
 
 export async function deleteAgent(agentId: string): Promise<void> {
   const retell = getRetell();
+  if ((await isAmyAgent(agentId)) || (await isAmyScreener(agentId))) {
+    throw new Error(AMY_NOT_DELETABLE);
+  }
   await retell.agent.delete(agentId);
 }

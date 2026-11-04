@@ -91,6 +91,7 @@ export default function NumbersClient() {
   const [termUri, setTermUri] = useState("");
   const [sipUser, setSipUser] = useState("");
   const [sipPass, setSipPass] = useState("");
+  const [transport, setTransport] = useState<"UDP" | "TCP" | "TLS">("UDP");
   const [nickname, setNickname] = useState("");
   const [inboundAgent, setInboundAgent] = useState("");
   const [outboundAgent, setOutboundAgent] = useState("");
@@ -184,6 +185,7 @@ export default function NumbersClient() {
           termination_uri: termUri.trim(),
           sip_username: sipUser,
           sip_password: sipPass,
+          transport,
           nickname,
           inbound_agent_id: inboundAgent,
           outbound_agent_id: outboundAgent,
@@ -239,6 +241,14 @@ export default function NumbersClient() {
   }
 
   async function remove(number: string) {
+    // One click here unlinks a live number from Retell — calls to it stop
+    // being answered at once. That is how the Twilio number vanished on
+    // 28 Oct, so make it a deliberate act.
+    const ok = window.confirm(
+      `Remove ${number} from Retell?\n\nCalls to this number will stop being answered by Amy immediately. ` +
+        `The number itself stays with your carrier and can be added back.`
+    );
+    if (!ok) return;
     setBusy(true);
     try {
       await api(`/api/phone-numbers/${encodeURIComponent(number)}`, { method: "DELETE" });
@@ -366,6 +376,23 @@ export default function NumbersClient() {
               ) : null}
 
               <div style={{ marginTop: 14, display: mode === "sip" ? "block" : "none" }}>
+                <span style={lbl}>Protocol</span>
+                <select
+                  style={{ ...field, width: 160 }}
+                  value={transport}
+                  onChange={(e) => setTransport(e.target.value as "UDP" | "TCP" | "TLS")}
+                >
+                  <option value="UDP">UDP</option>
+                  <option value="TCP">TCP</option>
+                  <option value="TLS">TLS</option>
+                </select>
+                <p style={{ fontSize: 12, color: C.faint, margin: "6px 0 0", lineHeight: 1.6 }}>
+                  Must match the carrier&apos;s trunk &mdash; Wavetel is UDP. A mismatch doesn&apos;t
+                  fail the import; it makes every transfer silently time out.
+                </p>
+              </div>
+
+              <div style={{ marginTop: 14, display: mode === "sip" ? "block" : "none" }}>
                 <span style={lbl}>Termination URI</span>
                 <input
                   style={field}
@@ -383,8 +410,7 @@ export default function NumbersClient() {
                   <p style={{ fontSize: 12, color: C.faint, margin: "8px 0 0", lineHeight: 1.6 }}>
                     Your carrier&apos;s host. Twilio: the trunk&apos;s Termination SIP URI
                     (<code>…pstn.twilio.com</code>). Others: the host they gave you &mdash; add
-                    <code> :port</code> only if it isn&apos;t 5060, and{" "}
-                    <code>;transport=tcp</code> if the trunk is TCP.
+                    <code> :port</code> only if it isn&apos;t 5060. Choose the protocol below.
                   </p>
                 )}
               </div>

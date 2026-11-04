@@ -45,9 +45,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Accept the transport either from the form's selector or written onto
+    // the URI the old way ("host;transport=udp"); the URI suffix is stripped
+    // so Retell gets a clean host and the transport in its own field.
+    const suffix = /;\s*transport\s*=\s*(udp|tcp|tls)\b/i.exec(terminationUri);
+    const chosen = String(body.transport ?? (suffix ? suffix[1] : "")).trim().toUpperCase();
+    const transport = (["UDP", "TCP", "TLS"].includes(chosen) ? chosen : "UDP") as "UDP" | "TCP" | "TLS";
+    const cleanUri = terminationUri.replace(/;\s*transport\s*=\s*\w+/i, "").trim();
+
     const result = await importNumber({
       phoneNumber,
-      terminationUri,
+      terminationUri: cleanUri,
+      transport,
       sipUsername: String(body.sip_username ?? "").trim(),
       sipPassword: String(body.sip_password ?? "").trim(),
       nickname: String(body.nickname ?? "").trim(),

@@ -539,3 +539,18 @@ export const AMY_IS_CODE_MANAGED =
   "message and account tools with the generic template's and break transfers and emails. " +
   "To change her prompt, staff, routing or hours, edit lib/hawkins or the Opening hours page, " +
   "then rebuild her with POST /api/hawkins/provision and press Publish in Retell.";
+
+/** Is this the screening agent Amy's transfers depend on? */
+export async function isAmyScreener(agentId: string): Promise<boolean> {
+  if (!agentId) return false;
+  try {
+    const a = (await getRetell().agent.retrieve(agentId)) as unknown as Record<string, unknown>;
+    return String(a.agent_name ?? "") === SCREENER_NAME;
+  } catch {
+    return false;
+  }
+}
+
+export const AMY_NOT_DELETABLE =
+  "Amy and her call screener can't be deleted from the console — removing either stops the firm's " +
+  "phones being answered or transferred. If that is really intended, delete them in the Retell dashboard.";

@@ -1,4 +1,5 @@
 import { getRetell, unwrapList } from "./retell-client";
+import { appBaseUrl } from "./retell-agents";
 
 export type RetellNumber = {
   phone_number: string;
@@ -91,6 +92,8 @@ export type ImportInput = {
   nickname?: string;
   inboundAgentId?: string;
   outboundAgentId?: string;
+  /** SIP transport for outbound legs (transfers). Retell's default is TCP. */
+  transport?: "UDP" | "TCP" | "TLS";
 };
 
 /**
@@ -118,8 +121,19 @@ export async function importNumber(input: ImportInput) {
     exists = false;
   }
 
+  // Every number Amy answers needs this webhook: it is how she learns whether
+  // the office is open and what the hours are. Imports used to leave it
+  // empty, so each newly added number had Amy treating the office as closed
+  // until someone set it by hand in the Retell dashboard.
+  const base = appBaseUrl();
+  const inboundWebhook = base ? `${base}/api/retell/inbound` : undefined;
+
   if (exists) {
+    // Retell's update API has no transport field, so an existing number keeps
+    // whatever transport it already has. Changing it means removing and
+    // re-adding the number, or setting it in the Retell dashboard.
     return retell.phoneNumber.update(input.phoneNumber, {
+      inbound_webhook_url: inboundWebhook,
       termination_uri: input.terminationUri,
       auth_username: input.sipUsername || undefined,
       auth_password: input.sipPassword || undefined,
@@ -136,6 +150,11 @@ export async function importNumber(input: ImportInput) {
   return retell.phoneNumber.import({
     phone_number: input.phoneNumber,
     termination_uri: input.terminationUri,
+    inbound_webhook_url: inboundWebhook,
+    // Retell defaults to TCP. Many carriers — Wavetel included — answer only
+    // on UDP, and the symptom is not a failed import but transfers that never
+    // connect: Retell's packets go unanswered, so every outbound leg times out.
+    transport: input.transport || "TCP",
     sip_trunk_auth_username: input.sipUsername || undefined,
     sip_trunk_auth_password: input.sipPassword || undefined,
     nickname: input.nickname || undefined,

@@ -3,7 +3,7 @@ import { checkAdmin } from "@/lib/auth";
 import { getAgent, updateAgent, deleteAgent } from "@/lib/retell-agents";
 import { getAgentSettings, saveAgentSettings } from "@/lib/agent-settings";
 import { deleteScreenAgent } from "@/lib/screening";
-import { isAmyAgent, AMY_IS_CODE_MANAGED } from "@/lib/hawkins/agent";
+import { isAmyAgent, isAmyScreener, AMY_IS_CODE_MANAGED, AMY_NOT_DELETABLE } from "@/lib/hawkins/agent";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,6 +94,10 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
 
   const { id } = await ctx.params;
   try {
+    if ((await isAmyAgent(id)) || (await isAmyScreener(id))) {
+      return NextResponse.json({ message: AMY_NOT_DELETABLE, code_managed: true }, { status: 409 });
+    }
+
     // Take the screener with it. Otherwise every deleted agent leaves a
     // "— screener" behind cluttering the Retell dashboard forever.
     const settings = await getAgentSettings(id);

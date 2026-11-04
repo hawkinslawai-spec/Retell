@@ -1109,7 +1109,11 @@ export default function AgentsClient() {
                 <span style={{ fontSize: 12.5, color: C.faint, fontFamily: "ui-monospace, monospace" }}>
                   {activeId}
                 </span>
-                <button style={{ ...btn("danger"), marginLeft: "auto" }} onClick={remove} disabled={busy}>
+                <button
+                  style={{ ...btn("danger"), marginLeft: "auto" }}
+                  onClick={remove}
+                  disabled={busy || isAmy}
+                >
                   Delete
                 </button>
               </>
