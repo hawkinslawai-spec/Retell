@@ -508,3 +508,34 @@ export async function amyAgentIds(): Promise<string[]> {
     return [];
   }
 }
+
+/**
+ * Is this Amy — an agent whose configuration lives in code?
+ *
+ * The console's generic "Phone agents" editor rebuilds an agent's tools from
+ * the original template (check_availability, book_appointment, save_lead)
+ * on every save, and Retell's published versions share the LLM with the
+ * draft. So one press of Save on Amy there silently replaced all eleven of
+ * her tools — the live version included — on 28 Oct and again before 4 Nov.
+ * She kept her prompt, so she went on *saying* she was transferring and
+ * taking messages while able to do neither.
+ *
+ * Checked against the agent as Retell holds it now, not against anything the
+ * browser sends, so a rename in the form can't slip past it.
+ */
+export async function isAmyAgent(agentId: string): Promise<boolean> {
+  if (!agentId) return false;
+  try {
+    const a = (await getRetell().agent.retrieve(agentId)) as unknown as Record<string, unknown>;
+    const name = String(a.agent_name ?? "").toLowerCase();
+    return name.startsWith("amy") && !name.includes("screener");
+  } catch {
+    return false;
+  }
+}
+
+export const AMY_IS_CODE_MANAGED =
+  "Amy is configured in code, not on this page. Saving her here would replace her transfer, " +
+  "message and account tools with the generic template's and break transfers and emails. " +
+  "To change her prompt, staff, routing or hours, edit lib/hawkins or the Opening hours page, " +
+  "then rebuild her with POST /api/hawkins/provision and press Publish in Retell.";

@@ -1,6 +1,7 @@
 import { getRetell, unwrapList } from "./retell-client";
 import { CustomLog } from "./custom-logs";
 import { getAgentSettings, saveAgentSettings } from "./agent-settings";
+import { isAmyAgent, AMY_IS_CODE_MANAGED } from "./hawkins/agent";
 import { upsertScreenAgent, defaultScreenPrompt } from "./screening";
 import { BUSINESS_NAME } from "./config";
 
@@ -539,6 +540,9 @@ export async function updateAgent(
   input: AgentInput
 ): Promise<void> {
   const retell = getRetell();
+
+  // Second line of defence, for any caller other than the PATCH route.
+  if (await isAmyAgent(agentId)) throw new Error(AMY_IS_CODE_MANAGED);
 
   // Read back what was just saved, so newly added logs get their tools.
   const settings = await getAgentSettings(agentId);

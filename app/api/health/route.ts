@@ -7,6 +7,10 @@ import { checkAdmin } from "@/lib/auth";
 import { appBaseUrl } from "@/lib/retell-agents";
 import { TIMEZONE, BRAND_NAME } from "@/lib/config";
 import { officeStatus } from "@/lib/hawkins/hours";
+import { amyAgentIds } from "@/lib/hawkins/agent";
+import { STAFF } from "@/lib/hawkins/firm";
+import { getRetell } from "@/lib/retell-client";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -240,6 +244,62 @@ export async function GET(req: NextRequest) {
       status: result.ok ? "pass" : "fail",
       detail: result.detail || err || "Email check failed",
       fix,
+    });
+  }
+
+  // ------------------------------------------------------------- Amy's tools
+  // Twice now Amy's tools were replaced by the generic template's, and the
+  // only symptom was a live caller being told "nobody is available". Check
+  // the tools Retell actually holds, so the setup page shows it at a glance.
+  try {
+    const ids = await amyAgentIds();
+    if (ids.length === 0) {
+      checks.push({
+        id: "amy_tools",
+        label: "Amy's tools",
+        status: "warn",
+        detail: "No agent named Amy found in Retell",
+      });
+    } else {
+      const retell = getRetell();
+      const agent = (await retell.agent.retrieve(ids[0])) as unknown as Record<string, unknown>;
+      const llmId = String(((agent.response_engine || {}) as Record<string, unknown>).llm_id ?? "");
+      const llm = llmId
+        ? ((await retell.llm.retrieve(llmId)) as unknown as Record<string, unknown>)
+        : {};
+      const names = (Array.isArray(llm.general_tools) ? llm.general_tools : []).map((t) =>
+        String((t as Record<string, unknown>).name ?? "")
+      );
+      const expected = [
+        "note_caller_details",
+        ...STAFF.map((st) => `transfer_to_${st.id}`),
+        "send_message",
+        "get_client_account_details",
+        "end_call",
+      ];
+      const missing = expected.filter((n) => !names.includes(n));
+      checks.push({
+        id: "amy_tools",
+        label: "Amy's tools",
+        status: missing.length === 0 ? "pass" : "fail",
+        detail:
+          missing.length === 0
+            ? `All ${expected.length} present — transfers, messages and account details will work`
+            : `Missing ${missing.length} of ${expected.length}: ${missing.join(", ")}${
+                names.length ? ` (has instead: ${names.join(", ")})` : ""
+              }`,
+        fix:
+          missing.length === 0
+            ? undefined
+            : "Amy's tools have been overwritten — most likely by pressing Save on her in the Phone agents page. Rebuild her with POST /api/hawkins/provision, then press Publish in Retell. Until then she cannot transfer calls or send messages.",
+      });
+    }
+  } catch (err) {
+    checks.push({
+      id: "amy_tools",
+      label: "Amy's tools",
+      status: "warn",
+      detail: `Could not read Amy from Retell: ${err instanceof Error ? err.message : String(err)}`,
     });
   }
 

@@ -3,6 +3,7 @@ import { checkAdmin } from "@/lib/auth";
 import { getAgent, updateAgent, deleteAgent } from "@/lib/retell-agents";
 import { getAgentSettings, saveAgentSettings } from "@/lib/agent-settings";
 import { deleteScreenAgent } from "@/lib/screening";
+import { isAmyAgent, AMY_IS_CODE_MANAGED } from "@/lib/hawkins/agent";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +34,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const { id } = await ctx.params;
   try {
     const body = (await req.json()) as Record<string, unknown>;
+
+    // Refuse before writing anything, so a blocked save leaves no
+    // half-updated settings behind.
+    if (await isAmyAgent(id)) {
+      return NextResponse.json({ message: AMY_IS_CODE_MANAGED, code_managed: true }, { status: 409 });
+    }
 
     // The screening agent's ID is provisioned server-side, never sent by the
     // browser. saveAgentSettings writes every column it is given and nulls the

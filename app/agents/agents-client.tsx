@@ -345,6 +345,13 @@ export default function AgentsClient() {
   })();
   const isRealtime = form.model.startsWith("gpt-realtime");
 
+  // Amy is built from code (lib/hawkins). This editor rebuilds an agent's
+  // tools from the generic template on save, which wiped her transfer and
+  // message tools twice. The server refuses the save; this says so up front
+  // instead of letting someone fill the form in first.
+  const isAmy =
+    !creating && /^amy/i.test(form.agent_name.trim()) && !/screener/i.test(form.agent_name);
+
   async function save() {
     setBusy(true);
     setNote("");
@@ -1064,10 +1071,36 @@ export default function AgentsClient() {
               borderTop: `1px solid ${C.border}`,
             }}
           >
+            {isAmy ? (
+              <div
+                style={{
+                  flexBasis: "100%",
+                  borderLeft: `2px solid ${C.brass}`,
+                  paddingLeft: 12,
+                  marginBottom: 6,
+                  fontSize: 12.5,
+                  color: C.dim,
+                  lineHeight: 1.7,
+                  maxWidth: "68ch",
+                }}
+              >
+                <strong style={{ color: C.brassText }}>Amy can&apos;t be saved from this page.</strong>{" "}
+                Her transfers, messages and account details are built from code, and saving here
+                would replace them with this page&apos;s generic tools. Change her hours on the
+                Opening hours page; anything else needs a rebuild from the code and a Publish in
+                Retell.
+              </div>
+            ) : null}
             <button
               style={btn("primary")}
               onClick={save}
-              disabled={busy || !form.agent_name || (!form.voice_id && !isRealtime) || Boolean(tabClash)}
+              disabled={
+                busy ||
+                isAmy ||
+                !form.agent_name ||
+                (!form.voice_id && !isRealtime) ||
+                Boolean(tabClash)
+              }
             >
               {busy ? "Saving…" : creating ? "Create agent" : "Save agent"}
             </button>
