@@ -359,7 +359,7 @@ export function amyTools(
     // static_text so the wording is exact rather than paraphrased.
     speak_during_execution: true,
     execution_message_type: "static_text" as const,
-    execution_message_description: `Let me see if ${staff.firstName} is available. Please hold for a moment.`,
+    execution_message_description: `I'll try to put you through to ${staff.firstName}. Please hold for a moment.`,
   }));
 
   return [

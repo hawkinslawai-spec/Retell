@@ -84,6 +84,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // "Good morning" / "Good afternoon" by the London clock. Amy is told to
+  // use this rather than work out the time of day herself.
+  const londonHour = Number(
+    new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", hour12: false }).format(
+      new Date()
+    )
+  );
+  const greeting = londonHour < 12 ? "Good morning" : londonHour < 18 ? "Good afternoon" : "Hello";
+
   return NextResponse.json({
     call_inbound: {
       dynamic_variables: {
@@ -95,6 +104,7 @@ export async function POST(req: NextRequest) {
         // hours she actually keeps.
         opening_hours_spoken: status.weeklyHoursSpoken || FIRM.hoursSpoken,
         caller_id_number: fromNumber,
+        greeting,
       },
       metadata: {
         office_status_reason: status.reason,

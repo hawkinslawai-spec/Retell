@@ -219,6 +219,11 @@ export async function rebuildAmy(opts: {
     office_open: "false",
     opening_hours_spoken: FIRM.hoursSpoken,
     next_working_day_spoken: "the next working day",
+    // Without the webhook there's no reliable time of day, and v3 says to
+    // fall back to "Hello" rather than guess.
+    greeting: "Hello",
+    now_spoken: "",
+    caller_id_number: "",
   };
 
   // 1. The screener that does the whisper, written and published first so

@@ -716,7 +716,7 @@ export default function AmyClient() {
           </div>
           <div style={{ marginTop: 14 }}>
             <Field
-              label="If asked to describe the firm"
+              label="Anything else approved to say about the firm (fees, services)"
               multiline
               value={firm.descriptionSpoken}
               onChange={(v) => { setFirm({ ...firm, descriptionSpoken: v }); touch(); }}

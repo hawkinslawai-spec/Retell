@@ -48,7 +48,7 @@ export const DEFAULT_STAFF: Staff[] = [
     fullName: "Mohshin Patel",
     directLine: "+442035041612",
     email: "mpatel@hawkinslaw.co.uk",
-    variants: ["mohsin", "mohsheen", "muhammad", "mohammed", "mohamed", "moshin", "mr patel"],
+    variants: ["mohsin", "mosin", "mosheen", "mohsheen", "muhammad", "mohammed", "mohamed", "moshin", "mr patel"],
   },
   {
     id: "aqilah",
@@ -72,7 +72,7 @@ export const DEFAULT_STAFF: Staff[] = [
     fullName: "Rafka Nawaz",
     directLine: "+442035041626",
     email: "rnawaz@hawkinslaw.co.uk",
-    variants: ["rafqa", "rafka nawaz", "nawaz"],
+    variants: ["rafqa", "rifqa", "rafka nawaz", "nawaz"],
   },
   {
     id: "muhammed",
@@ -252,9 +252,9 @@ export const FIRM = {
   emailSpoken: "info at hawkinslaw dot co dot uk",
   sraNumber: "641732",
   practiceAreasSpoken:
-    "property and conveyancing, personal injury, immigration, family law, debt recovery, litigation, and wills, trusts and probate",
+    "conveyancing and property, commercial property, Islamic finance, civil and commercial litigation, debt recovery, family law, immigration, personal injury, and wills, trusts and probate",
   descriptionSpoken:
-    "Hawkins Law is an SRA regulated solicitors firm located in London. Our experienced team handles property, personal injury, immigration, family, debt recovery, litigation, and wills and probate, and we offer fixed-price services for many matters.",
+    "The firm offers fixed-fee arrangements for many matters, subject to confirmation by the team.",
 };
 
 // ---------------------------------------------------------------------------
