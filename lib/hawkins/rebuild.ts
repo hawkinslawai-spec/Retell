@@ -94,6 +94,15 @@ async function publish(agentId: string, version: number | undefined, title: stri
     // Retell refuses to publish a version that is already published. That's
     // the outcome we wanted, so it isn't a failure.
     if (/already published/i.test(msg)) return version;
+    // Retell answers a successful publish with an empty body, which the SDK
+    // fails to parse ("Unexpected end of JSON input"). Ask Retell whether
+    // the version is now published rather than trusting the error.
+    try {
+      const v = (await getRetell().agent.retrieve(agentId, { version })) as unknown as Rec;
+      if (v.is_published === true) return version;
+    } catch {
+      // fall through to the warning
+    }
     warnings.push(`Could not publish version ${version}: ${msg}`);
     return undefined;
   }
