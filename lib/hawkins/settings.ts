@@ -37,6 +37,10 @@ export type AmySettings = {
   nameGuidance: string;
   /** Retell voice id. Empty means AMY_VOICE_ID from the environment. */
   voiceId: string;
+  /** Speaking speed, 0.5–2. 1 is the voice's natural pace. */
+  voiceSpeed: number;
+  /** Expressiveness, 0–2. Lower is steadier and calmer; 1 is the default. */
+  voiceTemperature: number;
 };
 
 export type StoredSettings = AmySettings & {
@@ -72,6 +76,8 @@ export function defaultSettings(): AmySettings {
     },
     nameGuidance: "Aqilah Patel and Aqeel Ramzan sound alike: always confirm which one is meant.",
     voiceId: "",
+    voiceSpeed: 1,
+    voiceTemperature: 1,
   };
 }
 
@@ -113,6 +119,8 @@ function merge(raw: Partial<AmySettings>): AmySettings {
     firm: { ...d.firm, ...(raw.firm || {}) },
     nameGuidance: typeof raw.nameGuidance === "string" ? raw.nameGuidance : d.nameGuidance,
     voiceId: typeof raw.voiceId === "string" ? raw.voiceId : d.voiceId,
+    voiceSpeed: typeof raw.voiceSpeed === "number" ? raw.voiceSpeed : d.voiceSpeed,
+    voiceTemperature: typeof raw.voiceTemperature === "number" ? raw.voiceTemperature : d.voiceTemperature,
   };
 }
 
@@ -309,11 +317,20 @@ export function parseSettings(body: unknown): { ok: true; value: AmySettings } |
 
   const voiceId = clean(b.voiceId, 120);
 
+  const num = (v: unknown, def: number) => (v === undefined || v === null || v === "" ? def : Number(v));
+  const voiceSpeed = Math.round(num(b.voiceSpeed, 1) * 100) / 100;
+  const voiceTemperature = Math.round(num(b.voiceTemperature, 1) * 100) / 100;
+  if (!(voiceSpeed >= 0.7 && voiceSpeed <= 1.3)) errors.push("Speaking speed must be between 0.7 and 1.3.");
+  if (!(voiceTemperature >= 0 && voiceTemperature <= 2)) errors.push("Expressiveness must be between 0 and 2.");
+
   if (errors.length > 0) {
     return { ok: false, message: [...new Set(errors)].slice(0, 12).join("\n") };
   }
 
-  return { ok: true, value: { staff, routes, generalEmail, firm, nameGuidance, voiceId } };
+  return {
+    ok: true,
+    value: { staff, routes, generalEmail, firm, nameGuidance, voiceId, voiceSpeed, voiceTemperature },
+  };
 }
 
 export async function saveAmySettings(

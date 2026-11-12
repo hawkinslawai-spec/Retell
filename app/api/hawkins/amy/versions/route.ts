@@ -27,7 +27,8 @@ export async function GET(req: NextRequest) {
     const items = (Array.isArray(list) ? list : list.items || []) as Rec[];
 
     const out = [];
-    for (const item of items.slice(-12)) {
+    const newestFirst = [...items].sort((a, b) => Number(b.version) - Number(a.version));
+    for (const item of newestFirst.slice(0, 12)) {
       const version = Number(item.version);
       const a = (await retell.agent.retrieve(agentId, { version })) as unknown as Rec;
       const engine = (a.response_engine || {}) as Rec;

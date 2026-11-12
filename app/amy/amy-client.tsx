@@ -31,6 +31,8 @@ type Settings = {
   firm: Firm;
   nameGuidance: string;
   voiceId: string;
+  voiceSpeed?: number;
+  voiceTemperature?: number;
   usingDefaults?: boolean;
   updatedAt?: string;
   error?: string;
@@ -115,6 +117,8 @@ export default function AmyClient() {
   const [firm, setFirm] = useState<Firm | null>(null);
   const [nameGuidance, setNameGuidance] = useState("");
   const [voiceId, setVoiceId] = useState("");
+  const [voiceSpeed, setVoiceSpeed] = useState(1);
+  const [voiceTemperature, setVoiceTemperature] = useState(1);
   const [meta, setMeta] = useState<Settings | null>(null);
   const [live, setLive] = useState<Live | null>(null);
   const [voices, setVoices] = useState<Voice[]>([]);
@@ -135,6 +139,8 @@ export default function AmyClient() {
     setFirm({ ...s.firm });
     setNameGuidance(s.nameGuidance);
     setVoiceId(s.voiceId);
+    setVoiceSpeed(typeof s.voiceSpeed === "number" ? s.voiceSpeed : 1);
+    setVoiceTemperature(typeof s.voiceTemperature === "number" ? s.voiceTemperature : 1);
     setMeta(s);
     if (l) setLive(l);
     setDirty(false);
@@ -288,6 +294,8 @@ export default function AmyClient() {
       firm,
       nameGuidance,
       voiceId,
+      voiceSpeed,
+      voiceTemperature,
     };
 
     // The server saves, then rebuilds and publishes; the second half is the
@@ -689,6 +697,50 @@ export default function AmyClient() {
           </label>
         </div>
         <span style={{ display: "block", fontSize: 11.5, color: C.faint, marginTop: 6 }}>{voiceId}</span>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginTop: 18, maxWidth: 640 }}>
+          <div>
+            <label style={lbl}>
+              Speaking speed: {voiceSpeed.toFixed(2)}
+              {voiceSpeed === 1 ? " (natural)" : voiceSpeed < 1 ? " (slower)" : " (faster)"}
+            </label>
+            <input
+              type="range"
+              min={0.7}
+              max={1.3}
+              step={0.05}
+              value={voiceSpeed}
+              style={{ width: "100%" }}
+              onChange={(e) => {
+                setVoiceSpeed(Number(e.target.value));
+                touch();
+              }}
+            />
+            <span style={{ display: "block", fontSize: 11.5, color: C.faint, marginTop: 4 }}>
+              If callers say she sounds rushed, try 0.90.
+            </span>
+          </div>
+          <div>
+            <label style={lbl}>
+              Expressiveness: {voiceTemperature.toFixed(2)}
+              {voiceTemperature === 1 ? " (default)" : voiceTemperature < 1 ? " (steadier)" : " (livelier)"}
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.1}
+              value={voiceTemperature}
+              style={{ width: "100%" }}
+              onChange={(e) => {
+                setVoiceTemperature(Number(e.target.value));
+                touch();
+              }}
+            />
+            <span style={{ display: "block", fontSize: 11.5, color: C.faint, marginTop: 4 }}>
+              Lower sounds calmer and more even; higher varies her tone more.
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* ----------------------------------------------------- firm wording */}

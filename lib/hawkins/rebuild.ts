@@ -263,6 +263,8 @@ export async function rebuildAmy(opts: {
   const agentBody = {
     agent_name: AMY_NAME,
     voice_id: voiceId,
+    voice_speed: settings.voiceSpeed ?? 1,
+    voice_temperature: settings.voiceTemperature ?? 1,
     language: "en-GB" as never,
     webhook_url: `${base}/api/retell/webhook`,
   };
